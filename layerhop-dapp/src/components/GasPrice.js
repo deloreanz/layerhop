@@ -1,23 +1,32 @@
 
 import { useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  Typography,
+} from '@material-ui/core';
 import axios from 'axios';
 
-const urlEthGasStation = 'https://ethgasstation.info/api/ethgasAPI.json';
+// const defipulseApiKey = '';
+// const urlEthGasStation = `https://data-api.defipulse.com/api/v1/egs/api/ethgasAPI.json?api-key=${defipulseApiKey}`;
+const urlEthGasStation = `https://data-api.defipulse.com/api/v1/egs/api/ethgasAPI.json`;
 
 export default () => {
   const [gasPrice, setGasPrice] = useState();
 
   useEffect(() => {
     const getGasPrice = async () => {
-      const res = await axios.get(urlEthGasStation);
-      console.log(res);
+      const { data } = await axios.get(urlEthGasStation);
+      setGasPrice(data.average / 10);
     };
     getGasPrice();
   }, []);
 
   return (
-    <div>
-      {gasPrice}
-    </div>
+    <Card>
+      <CardContent>
+        <Typography>Average Gas Price: {gasPrice} Gwei</Typography>
+      </CardContent>
+    </Card>
   );
 };
