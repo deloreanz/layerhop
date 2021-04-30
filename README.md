@@ -13,4 +13,14 @@ https://dev.to/dabit3/the-complete-guide-to-full-stack-ethereum-development-3j13
 - Annuity streams
 
 
+## Working with testnets
+Gets Polygon/Matic and Ethereum/Goerli testnet coins (MATIC, DERC20/TEST, LINK) from this faucet.  Once the coins are transfered, you can get their addresses to add to Metamask so their balances will show up.
+https://faucet.matic.network/
+Polygon mainnet and testnet details for adding to Metamask
+https://docs.matic.network/docs/develop/network-details/network
+Matic supported networks
+https://docs.matic.network/docs/develop/network-details/network
+
+
+
 
