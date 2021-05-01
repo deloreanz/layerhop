@@ -19,6 +19,7 @@ export default ({ children }) => {
   const [balances, setBalances] = useState({});
   const [network, setNetwork] = useState();
   const [networkType, setNetworkType] = useState();
+  const [networkId, setNetworkId] = useState();
 
   useEffect(() => {
     // this returns the provider, or null if it wasn't detected
@@ -93,6 +94,7 @@ export default ({ children }) => {
   const lookupAndSetNetwork = networkId => {
     const thisNetwork = getNetwork(networkId);
     setNetwork(thisNetwork);
+    setNetworkId(networkId);
     // setNetworkName(thisNetwork.name);
     // @todo fix hardcoded mainnet ids
     const thisNetworkType = [1, 137].includes(networkId)
@@ -126,6 +128,9 @@ export default ({ children }) => {
     if (networkId === 5) {
       return config.networks.ethereum.testnets.goerli;
     }
+    if (networkId === 42) {
+      return config.networks.ethereum.testnets.kovan;
+    }
     // Polygon
     if (networkId === 137) {
       return config.networks.polygon.mainnet;
@@ -149,6 +154,8 @@ export default ({ children }) => {
         account,
         network,
         networkType,
+        networkId,
+        getNetwork,
       }}
     >
       {children}

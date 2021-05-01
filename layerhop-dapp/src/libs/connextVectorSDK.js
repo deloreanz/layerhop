@@ -60,7 +60,9 @@ const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
       transferAmount: input,
       isRecipientAssetInput,
     });
-    console.log('Fee Estimate', res);
+    // console.log('Fee Estimate', res);
+    if (res.error) throw new Error(`Error estimating fee: ${res.error}`);
+    return res;
   } catch (e) {
     const message = 'Error Estimating Fees';
     console.log(message, e);

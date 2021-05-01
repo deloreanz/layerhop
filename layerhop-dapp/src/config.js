@@ -43,6 +43,11 @@ export default {
           name: 'Ethereum/Goerli',
           providerUrl: 'https://goerli.infura.io/v3/c5c672b375a64649849d05cab7a3ef01',
         },
+        kovan: {
+          id: 42,
+          name: 'Ethereum/Kovan',
+          providerUrl: 'https://kovan.infura.io/v3/c5c672b375a64649849d05cab7a3ef01',
+        },
       },
     },
     polygon: {
