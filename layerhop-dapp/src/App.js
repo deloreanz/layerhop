@@ -14,25 +14,23 @@ import { ethers } from 'ethers';
 import SuperfluidSDK from '@superfluid-finance/js-sdk/src';
 // import Greeter from './artifacts/contracts/Greeter.sol/Greeter.json';
 import GasPrice from './components/GasPrice.js';
-import { initConnext, getEstimatedFee } from './libs/connextVectorSDK.js';
+import { initConnext, getEstimatedFee, preTransferCheck, } from './libs/connextVectorSDK.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { getBalances } from './libs/covalentAPI.js';
 import { balanceOf } from './libs/erc20.js';
 
 import config from './config.js';
 
-// setup superfluid
-const windowProvider = new ethers.providers.Web3Provider(window.ethereum);
-const sf = new SuperfluidSDK.Framework({
-  ethers: windowProvider,
-  tokens: [
-    'fDAI',
-    'fUSDC',
-    'ETH',
-    // '0xdd5462a7db7856c9128bc77bd65c2919ee23c6e1',
-  ],
-});
+const getSuperfluidTokenSymbols = (config, networkId) => {
+  // @todo cleanup how testnets are detected
+  const networkType = [1, 137].includes(networkId) ? 'mainnet' : 'testnet';
+  return Object.entries(config.superfluid.tokenByNetwork[networkType][networkId]).map(([tokenAddress, token]) => {
+    return token.symbol;
+  });
+};
 
+// get the browser web3 provider
+const windowProvider = new ethers.providers.Web3Provider(window.ethereum);
 
 // MUI styles
 const useStyles = makeStyles(theme => ({
@@ -54,6 +52,12 @@ const useStyles = makeStyles(theme => ({
     // margin: 20,
     backgroundColor: '#d0d0d0',
   },
+  rateUpArrow: {
+    color: 'green',
+  },
+  rateDownArrow: {
+    color: 'red',
+  },
 }));
 
 // Update with the contract address logged out to the CLI when it was deployed 
@@ -62,7 +66,7 @@ const useStyles = makeStyles(theme => ({
 export default () => {
   // store greeting in local state
   const classes = useStyles();
-  const { provider, signer, address, connect, isConnected, balances: coinBalances, network, networkType, networkId, getNetwork } = useWallet();
+  const { loginProvider, signer, address, connect, isConnected, balances: coinBalances, network, networkType, networkId, getNetwork } = useWallet();
   // const [fromNetworkId, setFromNetworkId] = useState();
   const [toNetworkId, setToNetworkId] = useState();
   const [estimate, setEstimate] = useState();
@@ -71,9 +75,11 @@ export default () => {
   // ACTIONS: plotCourse, ship, unlockCollateral
   // SHIP STATE: cargoReady, shipReady, shipArrived, cargoDelivered, collateralUnlocked
   const [shipState, setShipState] = useState();
-  const [tokenToShip, setTokenToShip] = useState();
+  const [tokenToShip, setTokenToShip] = useState('fDAI');
+  const [tokenToShipAmount, setTokenToShipAmount] = useState(1);
   // balances = { address1: balance1, address2: balance  }
-  const [balances, setBalances] = useState({});
+  const [fromSuperBalances, setFromSuperBalances] = useState([]);
+  const [toSuperBalances, setToSuperBalances] = useState([]);
 
   // const ticker = () => {
   //   console.log('balances ....', balances);
@@ -94,93 +100,125 @@ export default () => {
     if (!networkId || !config) return;
     // console.log('config', config);
     // if using Ethereum/Kovan set 'to' network to Polygon/Mumbai
-    if (networkId === config.networks.ethereum.testnets.kovan.id) {
+    if (networkId === config.networks.ethereum.testnets.goerli.id) {
       setToNetworkId(config.networks.polygon.testnets.mumbai.id);
     }
     // if using Ethereum/Kovan set 'to' network to Polygon/Mumbai
     if (networkId=== config.networks.polygon.testnets.mumbai.id) {
-      setToNetworkId(config.networks.ethereum.testnets.kovan.id);
+      setToNetworkId(config.networks.ethereum.testnets.goerli.id);
     }
   }, [networkId, config]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // console.log('balances ....', balances);
-      if (!Object.keys(balances).length) return;
-      const newBalances = {};
-      // console.log('balance obj', Object.entries(balances));
-      Object.entries(balances).forEach(([address, { balance, rate }]) => {
-        // console.log('balance => ', balance);
-        newBalances[address] = {
-          balance: balance + (rate / Math.pow(10, 18)),
-          rate,
-        };
-      });
-      setBalances(newBalances);
+      if (Object.keys(fromSuperBalances).length) {
+        const newFromSuperBalances = {};
+        Object.entries(fromSuperBalances).forEach(([tokenAddress, { balance, rate }]) => {
+          newFromSuperBalances[tokenAddress] = {
+            tokenAddress,
+            balance: balance + (rate / Math.pow(10, 18)),
+            rate,
+          };
+        });
+        setFromSuperBalances(newFromSuperBalances);
+      }
+      if (Object.keys(toSuperBalances).length) {
+        const newToSuperBalances = {};
+        Object.entries(toSuperBalances).forEach(([tokenAddress, { balance, rate }]) => {
+          newToSuperBalances[tokenAddress] = {
+            tokenAddress,
+            balance: balance + (rate / Math.pow(10, 18)),
+            rate,
+          };
+        });
+        setFromSuperBalances(newToSuperBalances);
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [balances]);
+  }, [fromSuperBalances, toSuperBalances]);
 
   useEffect(() => {
-    if (!address) return;
+    if (!address || !config || !networkType || !networkId || !toNetworkId) return;
     const init = async () => {
-      // init SF
-      const sfResult = await sf.initialize();
-      const tokenAddress = sf.tokens.ETHx.address;
-      // const tokenAddress = sf.tokens.fDAI.address;
-      // const address = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
-      const accountDAI = sf.user({
-        address,
-        token: tokenAddress,
+      // init SF 'from' balance/rate
+      const sfFrom = new SuperfluidSDK.Framework({
+        ethers: windowProvider,
+        tokens: getSuperfluidTokenSymbols(config, networkId),
       });
-      const sfDetails = await accountDAI.details();
-      const rate = parseInt(sfDetails.cfa.netFlow);
-      console.log('accountDAI.details()', sfDetails);
-      const balance = await balanceOf({ provider: windowProvider, tokenAddress, address });
-      const test = {
-        ...balances,
-        [address]: {
+      await sfFrom.initialize();
+      const fromTokens = config.superfluid.tokenByNetwork[networkType][networkId];
+      const newFromSuperBalancesArray = (await Promise.all(Object.entries(fromTokens).map(async ([tokenAddress, entry]) => {
+        // @todo handle detecting super tokens better than this
+        if (!entry.symbol.endsWith('x')) return null;
+        const account = sfFrom.user({
+          address,
+          token: tokenAddress,
+        });
+        const details = await account.details();
+        const rate = parseInt(details.cfa.netFlow);
+        const balance = await balanceOf({ networkId, tokenAddress, address, });
+        return {
+          tokenAddress,
           balance,
           rate,
-        },
-      };
-      console.log('test', test);
-      setBalances({
-        ...balances,
-        [address]: {
-          balance,
-          rate,
-        },
-      });
+        };
+      }))).filter(entry => entry !== null);
+      var newFromSuperBalances = {};
+      newFromSuperBalancesArray.forEach(entry => newFromSuperBalances[entry.tokenAddress] = entry);
+      setFromSuperBalances(newFromSuperBalances);
+      // init SF 'to' balance/rate
+      // const sfTo = new SuperfluidSDK.Framework({
+      //   ethers: windowProvider,
+      //   tokens: getSuperfluidTokenSymbols(config, networkId),
+      // });
+      // await sfTo.initialize();
+      // const toTokens = config.superfluid.tokenByNetwork[networkType][toNetworkId];
+      // const newToSuperBalances = await Promise.all(Object.entries(toTokens).map(async ([tokenAddress, entry]) => {
+      //   const account = sfTo.user({
+      //     address,
+      //     token: tokenAddress,
+      //   });
+      //   const details = await account.details();
+      //   const rate = parseInt(details.cfa.netFlow);
+      //   const balance = await balanceOf({ networkId, tokenAddress, address, });
+      //   return ({
+      //     ...toSuperBalances,
+      //     [tokenAddress]: {
+      //       balance,
+      //       rate,
+      //     },
+      //   });
+      // }));
+      // setToSuperBalances(newToSuperBalances);
 
-      console.log('balance', balance);
+      console.log('done updating super balances');
     };
     init();
-  }, [address]);
+  }, [address, config, networkType, networkId, toNetworkId]);
 
   useEffect(() => {
-    if (!provider || !network || !networkType || !tokenToShip) return;
+    console.log(loginProvider, networkId, networkType, tokenToShip, toNetworkId);
+    if (!loginProvider || !networkId || !networkType || !tokenToShip || !toNetworkId) return;
     // @todo make this more dynamic, currently only setup for Polygon to Ethereum
-    // const thisFromNetworkId = networkType === 'testnet' ? 80001 : 137;
-    const thisToNetworkId = networkType === 'testnet' ? 5 : 1;
+    // const thisToNetworkId = networkType === 'testnet' ? 80001 : 1;
     // setFromNetworkId(network.id);
-    setToNetworkId(thisToNetworkId);
+    // setToNetworkId(thisToNetworkId);
 
     const init = async () => {
 
       // init the Connext Vector SDK
       const { offChainSenderChainAssetBalanceBn, offChainRecipientChainAssetBalanceBn } = await initConnext({
         connextNetwork: networkType,
-        loginProvider: provider,
-        fromNetworkId: network.id,
-        toNetworkId: thisToNetworkId,
-        senderAssetId: config.connext.network[networkType].tokens[tokenToShip][network.id],
-        recipientAssetId: config.connext.network[networkType].tokens[tokenToShip][thisToNetworkId],
+        loginProvider,
+        fromNetworkId: networkId,
+        toNetworkId: toNetworkId,
+        senderAssetId: config.connext.network[networkType].tokens[tokenToShip][networkId],
+        recipientAssetId: config.connext.network[networkType].tokens[tokenToShip][toNetworkId],
       });
       console.log(`offChainSenderChainAssetBalanceBn: ${offChainSenderChainAssetBalanceBn}`);
       console.log(`offChainRecipientChainAssetBalanceBn: ${offChainRecipientChainAssetBalanceBn}`);
       // now estimate a fee to test
-      const res = await getEstimatedFee(100);
+      const res = await getEstimatedFee(tokenToShipAmount);
       console.log('Fee estimate:', res);
       setEstimate(res);
 
@@ -191,19 +229,60 @@ export default () => {
       // @todo
     };
     init();
-  }, [provider, network, networkType, tokenToShip]);
+  }, [loginProvider, network, toNetworkId, networkType, tokenToShip]);
 
   useEffect(() => {
-    console.log('INFO', address, networkId, toNetworkId);
-    if (!address || !networkId || !toNetworkId) return;
+    if (!address || !networkId || !toNetworkId || !networkType) return;
     const init = async () => {
-      const resFrom = await getBalances(network.id, address);
-      const resTo = await getBalances(toNetworkId, address);
-      setFromBalances(resFrom.data.data.items);
-      setToBalances(resTo.data.data.items);
+      // if (networkId === 5 || toNetworkId === 5) {
+      //   // goerli not supported
+      //   return;
+      // }
+      // const resFrom = await getBalances(networkId, address);
+      // const resTo = await getBalances(toNetworkId, address);
+      // setFromBalances(resFrom.data.data.items);
+      // setToBalances(resTo.data.data.items);
+
+      // enabled tokens
+      const enabledTokenSymbols = {
+        mainnet: new Set([
+          'DAI', 'DAIx', 'USDC', 'USDCx',
+        ]),
+        testnet: new Set([
+          'fDAI', 'fDAIx', 'fUSDC', 'fUSDCx',
+        ]),
+      };
+      // get correct token addresses for this network
+      const allTokenEntriesFrom = Object.entries(config.superfluid.tokenByNetwork[networkType][networkId]);
+      const fromBalances = await Promise.all(allTokenEntriesFrom.map(async ([tokenAddress, entry]) => {
+        if (!enabledTokenSymbols[networkType].has(entry.symbol)) return;
+        const balance = await balanceOf({ networkId, tokenAddress, address });
+        return {
+          tokenAddress,
+          symbol: entry.symbol,
+          balance,
+          // @todo fix hardcode decimals
+          decimals: 18,
+        };
+      }));
+      const allTokenEntriesTo = Object.entries(config.superfluid.tokenByNetwork[networkType][toNetworkId]);
+      const toBalances = await Promise.all(allTokenEntriesTo.map(async ([tokenAddress, entry]) => {
+        if (!enabledTokenSymbols[networkType].has(entry.symbol)) return;
+        const balance = await balanceOf({ networkId: toNetworkId, tokenAddress, address });
+        return {
+          tokenAddress,
+          symbol: entry.symbol,
+          balance,
+          // @todo fix hardcode decimals
+          decimals: 18,
+        };
+      }));
+
+      setFromBalances(fromBalances);
+      setToBalances(toBalances);
     };
     init();
-  }, [address, networkId, toNetworkId]);
+  }, [address, networkId, toNetworkId, networkType]);
 
   // request access to the user's Metamask account
   async function requestAccount() {
@@ -238,6 +317,21 @@ export default () => {
   //   }
   // }
 
+  const shipTokens = async transferAmount => {
+    const res = await preTransferCheck(transferAmount);
+    console.log('shipTokens res', res);
+  };
+
+  const getTokenSymbolByAddress = tokenAddress => {
+    if (!config || !networkType) return '';
+    return config.superfluid.tokenByNetwork[networkType][networkId][tokenAddress.toLowerCase()].symbol;
+  };
+
+  const getRateArrow = rate => {
+    if (rate >= 0) return <Typography className={classes.rateUpArrow}>▲</Typography>;
+    else return <Typography className={classes.rateDownArrow}>▼</Typography>;
+  };
+
   return (
     <div className={classes.root}>
       <Grid container spacing={3}>
@@ -247,25 +341,27 @@ export default () => {
             <Typography variant='h4'>LayerHop</Typography>
           </Grid>
           <Grid item sm={2}>
+            <GasPrice />
+          </Grid>
+          <Grid item sm={4}>
             <Card>
               <CardContent>
                 {network &&
                   <Typography>Wallet connected to {network.name} (ID = {network.id})</Typography>
                 }
               </CardContent>
+              <Typography>{address}</Typography>
             </Card>
-          </Grid>
-          <Grid item sm={2}>
-            <GasPrice />
-          </Grid>
-          <Grid item sm={2}>
-            <Typography>{address}</Typography>
           </Grid>
         </Grid>
 
         <Grid container item justify='center' sm={12}>
-          <Typography>Estimate</Typography>
-          <Typography>{JSON.stringify(estimate)}</Typography>
+          <Card>
+            <CardContent>
+              <Typography>SHIPPING ESTIMATE HERE</Typography>
+              <Typography>{JSON.stringify(estimate)}</Typography>
+            </CardContent>
+          </Card>
         </Grid>
 
         <Grid container item spacing={3} justify='center' sm={12}>
@@ -275,32 +371,34 @@ export default () => {
                 <Typography variant='h6'>{network && network.name}</Typography>
               </Grid>
               <Grid item sm={12}>
+                <Typography variant='h6'>Streams 🌊 </Typography>
+              </Grid>
+              {Object.values(fromSuperBalances).map(({ tokenAddress, balance, rate }) =>
+                <Grid item container key={tokenAddress}>
+                  <Grid item sm={4}>
+                    <Typography>{getTokenSymbolByAddress(tokenAddress)}</Typography>
+                  </Grid>
+                  <Grid item sm={4}>
+                    <Typography>{balance.toFixed(6)}</Typography>
+                  </Grid>
+                  <Grid>{getRateArrow(rate)}</Grid>
+                </Grid>
+              )}
+              <Grid item sm={12}>
                 <Typography variant='h6'>Static 💰</Typography>
               </Grid>
               {Array.isArray(fromBalances) && fromBalances.map((entry, i) =>
                 <Grid item container key={i}>
                   <Grid item sm={4}>
-                    <Typography>{entry.contract_ticker_symbol}</Typography>
+                    <Typography>{entry.symbol}</Typography>
                   </Grid>
                   <Grid item sm={4}>
-                    <Typography>{parseInt(entry.balance) / (Math.pow(10, entry.contract_decimals))}</Typography>
+                    <Typography>{entry.balance.toFixed(6)}</Typography>
+                  </Grid>
+                  <Grid item sm={3}>
                     <Button
-                      onClick={() => setTokenToShip(entry.contract_ticker_symbol)}
-                    >Ship</Button>
-                  </Grid>
-                </Grid>
-              )}
-              <Grid item sm={12}>
-                <Typography variant='h6'>Streams 🌊 </Typography>
-              </Grid>
-              {Object.entries(balances).map(([address, { balance, rate }]) =>
-                <Grid item container key={address}>
-                  <Grid item sm={4}>
-                    <Typography>{address.substring(0, 8)}</Typography>
-                  </Grid>
-                  <Grid item sm={4}>
-                    {/* <Typography>{parseInt(balance) / (Math.pow(10, 18))}</Typography> */}
-                    <Typography>{balance}</Typography>
+                      onClick={() => setTokenToShip(entry.tokenAddress)}
+                    >{'Ship =>'}</Button>
                   </Grid>
                 </Grid>
               )}
@@ -313,11 +411,13 @@ export default () => {
               </Grid>
               <Grid item sm={12}>
                 <Typography justify='center'>Manifest 📋 📦📦📦</Typography>
+                <Typography>{tokenToShip}</Typography>
               </Grid>
               <Grid item sm={12}>
                 <Button
                   variant="contained"
                   color="primary"
+                  onClick={() => shipTokens(tokenToShipAmount)}
                 >Ship!</Button>
               </Grid>
 
@@ -332,10 +432,10 @@ export default () => {
               {Array.isArray(toBalances) && toBalances.map((entry, i) =>
                 <Grid item container key={i}>
                   <Grid item sm={4}>
-                    <Typography>{entry.contract_ticker_symbol}</Typography>
+                    <Typography>{entry.symbol}</Typography>
                   </Grid>
                   <Grid item sm={4}>
-                    <Typography>{parseInt(entry.balance) / (Math.pow(10, entry.contract_decimals))}</Typography>
+                    <Typography>{entry.balance.toFixed(6)}</Typography>
                   </Grid>
                 </Grid>
               )}

@@ -3,17 +3,21 @@ import { providers } from 'ethers';
 import config from '../config.js';
 
 const connextSdk = new ConnextSdk();
+var thisLoginProvider;
 // const webProvider = new providers.Web3Provider(window.ethereum);
 
 const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNetworkId, senderAssetId, recipientAssetId }) => {
   // input validation
   if (!['mainnet', 'testnet'].includes(connextNetwork)) throw new Error(`Invalid Connext network '${connextNetwork}'.`);
   let fromChainProviderUrl, toChainProviderUrl;
+  thisLoginProvider = loginProvider;
   // @todo support more chain combos
   if (fromNetworkId === 137) {
     fromChainProviderUrl = config.networks.polygon.mainnet.providerUrl;
   } else if (fromNetworkId === 80001) {
     fromChainProviderUrl = config.networks.polygon.testnets.mumbai.providerUrl; 
+  } else if (fromNetworkId === 5) {
+    fromChainProviderUrl = config.networks.ethereum.testnets.goerli.providerUrl; 
   } else {
     throw new Error(`Unsupported 'from' network id: ${fromNetworkId}`);
   }
@@ -21,6 +25,8 @@ const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNet
     toChainProviderUrl = config.networks.ethereum.mainnet.providerUrl;
   } else if (toNetworkId === 5) {
     toChainProviderUrl = config.networks.ethereum.testnets.goerli.providerUrl; 
+  } else if (toNetworkId === 80001) {
+    toChainProviderUrl = config.networks.polygon.testnets.mumbai.providerUrl; 
   } else {
     throw new Error(`Unsupported 'to' network id: ${toNetworkId}`);
   }
@@ -69,9 +75,29 @@ const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
   }
 };
 
+const preTransferCheck = async transferAmount => {
+  if (typeof transferAmount !== 'string') {
+    transferAmount = transferAmount + '';
+  }
+  try {
+    return await connextSdk.deposit({
+      transferAmount,
+      webProvider: thisLoginProvider,
+      onDeposited: txHash => {
+        console.log('txHash', txHash);
+      },
+    });
+  } catch (e) {
+    if (e.message.includes('User denied transaction signature')) {
+      return;
+    }
+    console.log('Error at deposit', e);
+  }
+}
 
 export {
   initConnext,
   getEstimatedFee,
+  preTransferCheck,
   // deposit,
 };

@@ -1,14 +1,13 @@
-import { providers, Contract } from 'ethers';
+import { Contract } from 'ethers';
+import { getProvider } from './web3Providers.js';
 
 const erc20Abi = require('./maker.json');
 
-const balanceOf = async ({ provider, network, tokenAddress, address }) => {
-  provider = provider
-    ? provider
-    : providers.getDefaultProvider(network);
+const balanceOf = async ({ networkId, tokenAddress, address }) => {
+  const provider = getProvider(networkId);
   const contract = new Contract(tokenAddress, erc20Abi, provider);
   const balance = await contract.balanceOf(address);
-  // @todo divide by decimals?
+  // @todo dynamic divide by decimals?
   return parseInt(balance.toString()) / Math.pow(10, 18);
 };
 

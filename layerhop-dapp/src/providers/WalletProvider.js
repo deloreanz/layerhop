@@ -10,7 +10,7 @@ export const useWallet = () => useContext(WalletContext);
 export default ({ children }) => {
   const [walletState, setWalletState] = useState({});
 
-  const [provider, setProvider] = useState();
+  const [loginProvider, setLoginProvider] = useState();
   const [signer, setSigner] = useState();
   const [address, setAddress] = useState();
   const [isConnected, setIsConnected] = useState(false);
@@ -39,13 +39,13 @@ export default ({ children }) => {
       // ask user to confirm
       await window.ethereum.enable();
       // setup provider
-      const thisProvider = new ethers.providers.Web3Provider(window.ethereum);
-      setProvider(thisProvider);
-      const thisSigner = thisProvider.getSigner();
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      setLoginProvider(provider);
+      const thisSigner = provider.getSigner();
       setSigner(thisSigner);
       setAddress(await thisSigner.getAddress());
       // get network id
-      const { chainId: networkId } = await thisProvider.getNetwork();
+      const { chainId: networkId } = await provider.getNetwork();
       lookupAndSetNetwork(networkId);
     };
     init();
@@ -68,12 +68,12 @@ export default ({ children }) => {
   }, []);
 
   useEffect(() => {
-    if (!provider) return;
+    if (!loginProvider) return;
     // @todo try to do this in a cleaner way
     const interval = setInterval(async () => {
       if (!window.ethereum.selectedAddress) return;
       setAccount(window.ethereum.selectedAddress);
-      console.log('Connected!');
+      console.log('Connected to local wallet provider!');
       setIsConnected(true);
       clearInterval(interval);
 
@@ -89,7 +89,7 @@ export default ({ children }) => {
       setAccounts(accounts);
       console.log('accounts', accounts);
     }, 100);
-  }, [provider]);
+  }, [loginProvider]);
 
   const lookupAndSetNetwork = networkId => {
     const thisNetwork = getNetwork(networkId);
@@ -144,7 +144,7 @@ export default ({ children }) => {
     <WalletContext.Provider
       value={{
         walletState,
-        provider,
+        loginProvider,
         signer,
         address,
         connect,
