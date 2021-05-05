@@ -1,5 +1,5 @@
-import { ConnextSdk } from '@connext/vector-sdk';
-import { providers } from 'ethers';
+import { ConnextSdk, ERC20Abi } from '@connext/vector-sdk';
+import { providers, BigNumber, utils, constants, Contract, } from 'ethers';
 import config from '../config.js';
 
 const connextSdk = new ConnextSdk();
@@ -48,6 +48,7 @@ const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNet
       // recipientAssetId: '0xbd69fC70FA1...', // Asset/Token Address on Recipient Chain
     });
     console.log('Initialized Connext Vector SDK!');
+
     return connextRes;
   } catch (e) {
     const message = 'Error initalizing';
@@ -55,6 +56,8 @@ const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNet
     throw e;
   }
 };
+
+// const getStateChannels = async () => connextSdk.getStateChannels();
 
 const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
   if (!input) throw new Error('input param required');
@@ -93,11 +96,82 @@ const preTransferCheck = async transferAmount => {
     }
     console.log('Error at deposit', e);
   }
-}
+};
+
+const crossChainSwap = async (withdrawalAddress, transferQuote) => {
+  if (!transferQuote) throw new Error('param transferQuote is required');
+  try {
+    // connextSdk.withdraw({  })
+    await connextSdk.crossChainSwap({
+      transferQuote,
+      recipientAddress: withdrawalAddress, // Recipient Address
+      // onTransferred:
+      onTransferred: (a, b, c) => console.log(`cross chain swap transfered: `, a, b, c),
+      onFinished: (toNetworkTxHash, x, y, z) => console.log(`cross chain swap finished: `, toNetworkTxHash, x, y, z), // onFinished callback function
+    });
+  } catch (e) {
+    console.log('Error at withdraw', e);
+    throw e;
+  }
+};
+
+const getDepositAddress = () => {
+  return connextSdk.senderChainChannelAddress;
+};
+
+const getWithdrawAddress = () => {
+  return connextSdk.recipientChainChannelAddress;
+};
+
+const deposit = async (webProvider, transferAmount) => {
+  try {
+    await connextSdk.preTransferCheck(transferAmount);
+  } catch (e) {
+    console.log('Error at preCheck', e);
+  }
+
+  const transferAmountBn = BigNumber.from(
+    utils.parseUnits(transferAmount, connextSdk.senderChain.assetDecimals)
+  );
+  console.log(transferAmountBn);
+
+  try {
+    const signer = webProvider.getSigner();
+    const depositAddress = getDepositAddress();
+
+    const depositTx =
+      connextSdk.senderChain.assetId === constants.AddressZero
+        ? await signer.sendTransaction({
+            to: depositAddress,
+            value: transferAmountBn,
+          })
+        : await new Contract(
+            connextSdk.senderChain.assetId,
+            ERC20Abi,
+            signer
+          ).transfer(depositAddress, transferAmountBn);
+
+    console.log('depositTx', depositTx.hash);
+
+    const receipt = await depositTx.wait(1);
+    console.log('deposit mined:', receipt.transactionHash);
+  } catch (e) {
+    console.log('Error during deposit', e);
+  }
+};
+
+const withdraw = async () => {
+
+};
 
 export {
   initConnext,
+  // getStateChannels,
   getEstimatedFee,
+  getDepositAddress,
+  getWithdrawAddress,
+  deposit,
   preTransferCheck,
-  // deposit,
+  crossChainSwap,
+  withdraw,
 };

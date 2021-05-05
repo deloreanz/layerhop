@@ -1,4 +1,14 @@
 export default {
+  layerhop: {
+    networks: {
+      5: {
+        contractAddress: '0xf3685b4F7a984157e143DAce957272bCa4f094C5',
+      },
+      80001: {
+        contractAddress: '',
+      },
+    },
+  },
   superfluid: {
     tokenByNetwork: {
       mainnet: {
@@ -73,7 +83,7 @@ export default {
       },
       testnet: {
         // publicId: 'vector7tbbTxQp8ppEQUgPsbGiTrVdapLdU5dH7zTbVuXRf1M4CEBU9Q',
-        publicId: 'vector7NFbePKh8PpVRjcCic4kb17yJp1niCZXPzKCWJw2rA9ZUsqR3t',
+        publicId: 'vector5AdAkSFUXbZw132qwXMhREQKea5H4vsHttYsaRq7S3vC651KzE',
         tokens: {
           fDAI: {
             5: '0x88271d333c72e51516b67f5567c728e702b3eee8',

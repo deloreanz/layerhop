@@ -1,11 +1,11 @@
 // libs
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, createContext, useContext } from 'react';
 import { ethers } from 'ethers';
 import config from '../config';
 // import { balanceOf } from '../contracts/erc20.js';
 // vars
 // exports
-export const WalletContext = React.createContext();
+export const WalletContext = createContext();
 export const useWallet = () => useContext(WalletContext);
 export default ({ children }) => {
   const [walletState, setWalletState] = useState({});

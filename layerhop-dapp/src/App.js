@@ -10,14 +10,16 @@ import {
   Typography,
   Paper,
 } from '@material-ui/core';
-import { ethers } from 'ethers';
+import { ethers, providers } from 'ethers';
 import SuperfluidSDK from '@superfluid-finance/js-sdk/src';
 // import Greeter from './artifacts/contracts/Greeter.sol/Greeter.json';
 import GasPrice from './components/GasPrice.js';
-import { initConnext, getEstimatedFee, preTransferCheck, } from './libs/connextVectorSDK.js';
+import { initConnext, getEstimatedFee, preTransferCheck, crossChainSwap, withdraw, getWithdrawAddress, } from './libs/connextVectorSDK.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { getBalances } from './libs/covalentAPI.js';
 import { balanceOf } from './libs/erc20.js';
+import layerhopContractLib from './libs/layerhopContract.js';
+import { getProvider } from './libs/web3Providers.js';
 
 import config from './config.js';
 
@@ -42,6 +44,8 @@ const useStyles = makeStyles(theme => ({
   paper: {
     height: 140,
     width: 100,
+    // padding: theme.spacing(2),
+    // padding: 10,
   },
   control: {
     padding: theme.spacing(2),
@@ -51,6 +55,7 @@ const useStyles = makeStyles(theme => ({
     width: '100%',
     // margin: 20,
     backgroundColor: '#d0d0d0',
+    padding: 10,
   },
   rateUpArrow: {
     color: 'green',
@@ -67,19 +72,29 @@ export default () => {
   // store greeting in local state
   const classes = useStyles();
   const { loginProvider, signer, address, connect, isConnected, balances: coinBalances, network, networkType, networkId, getNetwork } = useWallet();
+  const [toNetworkAddress, setToNetworkAddress] = useState();
   // const [fromNetworkId, setFromNetworkId] = useState();
-  const [toNetworkId, setToNetworkId] = useState();
+  const [networkIdTo, setNetworkIdTo] = useState();
   const [estimate, setEstimate] = useState();
   const [fromBalances, setFromBalances] = useState();
   const [toBalances, setToBalances] = useState();
   // ACTIONS: plotCourse, ship, unlockCollateral
   // SHIP STATE: cargoReady, shipReady, shipArrived, cargoDelivered, collateralUnlocked
   const [shipState, setShipState] = useState();
-  const [tokenToShip, setTokenToShip] = useState('fDAI');
-  const [tokenToShipAmount, setTokenToShipAmount] = useState(1);
+  const [tokenToShipAddress, setTokenToShipAddress] = useState();
+  const [tokenToShip, setTokenToShip] = useState();
+  const [tokenToShipAmount, setTokenToShipAmount] = useState(4);
+  const [tokenAddressTo, setTokenAddressTo] = useState();
   // balances = { address1: balance1, address2: balance  }
   const [fromSuperBalances, setFromSuperBalances] = useState([]);
   const [toSuperBalances, setToSuperBalances] = useState([]);
+  // mirrors the balances stored in the LayerHop smart contract on the network the browser wallet is connected to
+  const [layerhopBalancesFrom, setLayerhopBalancesFrom] = useState();
+  // balances on the 'to' network
+  const [layerhopBalancesTo, setLayerhopBalancesTo] = useState();
+  // contracts on 'from' and 'to' networks
+  const [layerhopContractFrom, setLayerhopContractFrom] = useState();
+  const [layerhopContractTo, setLayerhopContractTo] = useState();
 
   // const ticker = () => {
   //   console.log('balances ....', balances);
@@ -96,16 +111,65 @@ export default () => {
   //   setBalances(newBalances);
   // };
 
+  // keep layerhop balances updated from smart contract
+  useEffect(() => {
+    if (!networkId || !networkType || !config || !tokenToShipAddress) return;
+    if (!config.layerhop.networks[networkId].contractAddress) return;
+    const layerhopContractFrom = layerhopContractLib({ networkId, });
+    setLayerhopContractFrom(layerhopContractFrom);
+    // @todo check on an interval
+    // get balances
+    const getBalances = async () => {
+      setLayerhopBalancesFrom(await layerhopContractFrom.getBalance(address, tokenToShipAddress));
+    };
+    getBalances();
+    // set the 'to' network token address
+    setTokenAddressTo(config.connext.network[networkType].tokens[tokenToShip][networkIdTo]);
+  }, [networkId, config, tokenToShipAddress]);
+  // layerhop 'to' network contract
+  useEffect(() => {
+    if (!networkIdTo || !config) return;
+    if (!config.layerhop.networks[networkIdTo].contractAddress) return;
+    const layerhopContractTo = layerhopContractLib({ networkIdTo, });
+    setLayerhopContractTo(layerhopContractTo);
+    // @todo check on an interval
+    // get balances
+    const getBalances = async () => {
+      setLayerhopBalancesTo(await layerhopContractTo.getBalance(address, tokenToShipAddress));
+    };
+    getBalances();
+  }, [networkIdTo, networkType, config, tokenToShipAddress]);
+
+  // set the default token to ship
+  useEffect(() => {
+    // only run when tokenToShip is not set initially
+    if (tokenToShip || !config || !networkType || !networkId) return;
+    const defaultTokenSymbol = 'fDAI';
+    const defaultTokenToShipAddress = Object.entries(config.superfluid.tokenByNetwork[networkType][networkId])
+      .filter(([tokenAddress, entry]) => entry.symbol === defaultTokenSymbol);
+    const thisAddress = defaultTokenToShipAddress[0][0];
+    console.log(`Setting default token to ship to address = ${thisAddress}`);
+    setTokenToShip(defaultTokenSymbol);
+    setTokenToShipAddress(thisAddress);
+  }, [config, networkType, networkId]);
+
+  // assume the 'to' network address is the same as the 'from' network address
+  // @todo make this flexible 
+  useEffect(() => {
+    if (!address) return;
+    setToNetworkAddress(address);
+  }, [address]);
+
   useEffect(() => {
     if (!networkId || !config) return;
     // console.log('config', config);
     // if using Ethereum/Kovan set 'to' network to Polygon/Mumbai
     if (networkId === config.networks.ethereum.testnets.goerli.id) {
-      setToNetworkId(config.networks.polygon.testnets.mumbai.id);
+      setNetworkIdTo(config.networks.polygon.testnets.mumbai.id);
     }
     // if using Ethereum/Kovan set 'to' network to Polygon/Mumbai
     if (networkId=== config.networks.polygon.testnets.mumbai.id) {
-      setToNetworkId(config.networks.ethereum.testnets.goerli.id);
+      setNetworkIdTo(config.networks.ethereum.testnets.goerli.id);
     }
   }, [networkId, config]);
 
@@ -138,7 +202,7 @@ export default () => {
   }, [fromSuperBalances, toSuperBalances]);
 
   useEffect(() => {
-    if (!address || !config || !networkType || !networkId || !toNetworkId) return;
+    if (!address || !config || !networkType || !networkId || !networkIdTo) return;
     const init = async () => {
       // init SF 'from' balance/rate
       const sfFrom = new SuperfluidSDK.Framework({
@@ -194,15 +258,16 @@ export default () => {
       console.log('done updating super balances');
     };
     init();
-  }, [address, config, networkType, networkId, toNetworkId]);
+  }, [address, config, networkType, networkId, networkIdTo]);
 
   useEffect(() => {
-    console.log(loginProvider, networkId, networkType, tokenToShip, toNetworkId);
-    if (!loginProvider || !networkId || !networkType || !tokenToShip || !toNetworkId) return;
+    // console.log(loginProvider, networkId, networkType, tokenToShip, networkIdTo);
+    if (!loginProvider || !networkId || !networkType || !tokenToShip || !networkIdTo) return;
     // @todo make this more dynamic, currently only setup for Polygon to Ethereum
     // const thisToNetworkId = networkType === 'testnet' ? 80001 : 1;
     // setFromNetworkId(network.id);
     // setToNetworkId(thisToNetworkId);
+    console.log(loginProvider, networkId, networkType, tokenToShip, networkIdTo);
 
     const init = async () => {
 
@@ -211,17 +276,20 @@ export default () => {
         connextNetwork: networkType,
         loginProvider,
         fromNetworkId: networkId,
-        toNetworkId: toNetworkId,
+        toNetworkId: networkIdTo,
+        // lookup connext asset addresses using the token symbol on both networks
         senderAssetId: config.connext.network[networkType].tokens[tokenToShip][networkId],
-        recipientAssetId: config.connext.network[networkType].tokens[tokenToShip][toNetworkId],
+        recipientAssetId: config.connext.network[networkType].tokens[tokenToShip][networkIdTo],
       });
       console.log(`offChainSenderChainAssetBalanceBn: ${offChainSenderChainAssetBalanceBn}`);
       console.log(`offChainRecipientChainAssetBalanceBn: ${offChainRecipientChainAssetBalanceBn}`);
       // now estimate a fee to test
-      const res = await getEstimatedFee(tokenToShipAmount);
-      console.log('Fee estimate:', res);
-      setEstimate(res);
-
+      const thisEstimate = await getEstimatedFee(tokenToShipAmount);
+      console.log('Fee estimate:', thisEstimate);
+      setEstimate(thisEstimate);
+      // get state channels
+      // const stateChannels = await getStateChannels();
+      // console.log('stateChannels', stateChannels);
       // connect to Polygon
       // const polygon = ethers.getDefaultProvider('https://rpc-mainnet.maticvigil.com');
       // const test = await polygon.getBlockNumber();
@@ -229,10 +297,10 @@ export default () => {
       // @todo
     };
     init();
-  }, [loginProvider, network, toNetworkId, networkType, tokenToShip]);
+  }, [loginProvider, network, networkIdTo, networkType, tokenToShip]);
 
   useEffect(() => {
-    if (!address || !networkId || !toNetworkId || !networkType) return;
+    if (!address || !networkId || !networkIdTo || !networkType) return;
     const init = async () => {
       // if (networkId === 5 || toNetworkId === 5) {
       //   // goerli not supported
@@ -265,10 +333,10 @@ export default () => {
           decimals: 18,
         };
       }));
-      const allTokenEntriesTo = Object.entries(config.superfluid.tokenByNetwork[networkType][toNetworkId]);
+      const allTokenEntriesTo = Object.entries(config.superfluid.tokenByNetwork[networkType][networkIdTo]);
       const toBalances = await Promise.all(allTokenEntriesTo.map(async ([tokenAddress, entry]) => {
         if (!enabledTokenSymbols[networkType].has(entry.symbol)) return;
-        const balance = await balanceOf({ networkId: toNetworkId, tokenAddress, address });
+        const balance = await balanceOf({ networkId: networkIdTo, tokenAddress, address });
         return {
           tokenAddress,
           symbol: entry.symbol,
@@ -282,7 +350,7 @@ export default () => {
       setToBalances(toBalances);
     };
     init();
-  }, [address, networkId, toNetworkId, networkType]);
+  }, [address, networkId, networkIdTo, networkType]);
 
   // request access to the user's Metamask account
   async function requestAccount() {
@@ -317,9 +385,68 @@ export default () => {
   //   }
   // }
 
+  // APPROVE (SHIPPER ACTION)
+  const approveERC20 = () => {
+
+  };
+
+  // PREP CARGO (SHIPPER ACTION)
+  const depositTokensToLayerhop = () => {
+
+  };
+
+  // HAIL A BOAT (CAPTAIN ACTION)
+  const openStateChannel = () => {
+
+  };
+
+  // LOAD CARGO ON BOAT (CAPTAIN ACTION)
+  const depositToChannel = () => {
+
+  };
+
+  // SHIP CARGO (CAPTAIN ACTION)
   const shipTokens = async transferAmount => {
-    const res = await preTransferCheck(transferAmount);
-    console.log('shipTokens res', res);
+    if (!estimate.transferQuote) throw new Error('estimate.transferQuote is required to perform a cross chain swap');
+    await preTransferCheck(transferAmount);
+    // await crossChainSwap(toNetworkAddress, estimate.transferQuote);
+
+    console.log('Generating callData for withdraw onto other chain...');
+    const callData = await layerhopContractFrom.getCallData({
+      plans: [
+        [
+          // accountAddress
+          address,
+          // opCode
+          0x0001,
+          // tokenAddress
+          tokenAddressTo,
+          // tokenAmount
+          // @todo fix this to only be for user 1 once batching is enabled
+          tokenToShipAmount,
+        ],
+      ],
+    });
+    console.log('callData:', callData);
+    const connextWithdraw = await withdraw({
+      assetId: tokenToShipAddress,
+      amount: tokenToShipAmount,
+      channelAddress: getWithdrawAddress(), //fromChannel.channelAddress,
+      callData,
+      callTo: config.layerhop.networks[networkIdTo].contractAddress,
+      // @todo allow user to change this to their address on the other chain if they don't want to deposit into the layerhop contract
+      recipient: config.layerhop.networks[networkIdTo].contractAddress,
+      // fee,
+    });
+    if (connextWithdraw.isError) {
+      throw connextWithdraw.getError();
+    }
+    console.log(`connextWithdraw complete: `, connextWithdraw.getValue());
+    // make sure tx is sent
+    let tx = connextWithdraw.getValue().transactionHash;
+    const providerFrom = getProvider(networkId);
+    let receipt = await providerFrom.waitForTransaction(tx);
+    console.log('connextWithdraw receipt: ', receipt);
   };
 
   const getTokenSymbolByAddress = tokenAddress => {
@@ -328,8 +455,8 @@ export default () => {
   };
 
   const getRateArrow = rate => {
-    if (rate >= 0) return <Typography className={classes.rateUpArrow}>▲</Typography>;
-    else return <Typography className={classes.rateDownArrow}>▼</Typography>;
+    if (rate > 0) return <Typography className={classes.rateUpArrow}>▲</Typography>;
+    if (rate < 0) return <Typography className={classes.rateDownArrow}>▼</Typography>;
   };
 
   return (
@@ -358,20 +485,20 @@ export default () => {
         <Grid container item justify='center' sm={12}>
           <Card>
             <CardContent>
-              <Typography>SHIPPING ESTIMATE HERE</Typography>
+              <Typography>SHIPPING ESTIMATE</Typography>
               <Typography>{JSON.stringify(estimate)}</Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid container item spacing={3} justify='center' sm={12}>
-          <Grid container item spacing={3} sm={3}>
+        <Grid container item spacing={5} justify='center' sm={12}>
+          <Grid container item sm={3}>
             <Paper className={classes.networkBlock}>
               <Grid item sm={12}>
                 <Typography variant='h6'>{network && network.name}</Typography>
               </Grid>
               <Grid item sm={12}>
-                <Typography variant='h6'>Streams 🌊 </Typography>
+                <Typography variant='h6'>Stream Tokens 🌊 </Typography>
               </Grid>
               {Object.values(fromSuperBalances).map(({ tokenAddress, balance, rate }) =>
                 <Grid item container key={tokenAddress}>
@@ -385,7 +512,7 @@ export default () => {
                 </Grid>
               )}
               <Grid item sm={12}>
-                <Typography variant='h6'>Static 💰</Typography>
+                <Typography variant='h6'>Static Tokens 💰</Typography>
               </Grid>
               {Array.isArray(fromBalances) && fromBalances.map((entry, i) =>
                 <Grid item container key={i}>
@@ -397,7 +524,7 @@ export default () => {
                   </Grid>
                   <Grid item sm={3}>
                     <Button
-                      onClick={() => setTokenToShip(entry.tokenAddress)}
+                      onClick={() => setTokenToShipAddress(entry.tokenAddress)}
                     >{'Ship =>'}</Button>
                   </Grid>
                 </Grid>
@@ -417,17 +544,16 @@ export default () => {
                 <Button
                   variant="contained"
                   color="primary"
+                  disabled={!estimate || !estimate.transferQuote}
                   onClick={() => shipTokens(tokenToShipAmount)}
                 >Ship!</Button>
               </Grid>
-
-              
             </Paper>
           </Grid>
           <Grid container item sm={3}>
             <Paper className={classes.networkBlock}>
               <Grid item sm={12}>
-                <Typography variant='h6'>{toNetworkId}</Typography>
+                <Typography variant='h6'>{networkIdTo}</Typography>
               </Grid>
               {Array.isArray(toBalances) && toBalances.map((entry, i) =>
                 <Grid item container key={i}>
@@ -439,6 +565,33 @@ export default () => {
                   </Grid>
                 </Grid>
               )}
+            </Paper>
+          </Grid>
+        </Grid>
+
+        <Grid container item spacing={3} justify='center' sm={12}>
+          <Grid container item spacing={3} sm={8}>
+            <Paper className={classes.networkBlock}>
+              <Grid item sm={12}>
+                <Typography variant='h6'>{network && network.name} LayerHop Balances</Typography>
+              </Grid>
+              {/* @todo make this work for more than one token */}
+              <Grid item sm={12}>
+                <Typography variant='h6'>{tokenToShip}:</Typography>
+              </Grid>
+              {layerhopBalancesFrom && JSON.stringify(layerhopBalancesFrom)}
+              {layerhopBalancesFrom && layerhopBalancesFrom[tokenToShipAddress] && 
+              Object.entries(layerhopBalancesFrom[tokenToShipAddress]).map(([accountAddress, balance]) =>
+                <Grid container item sm={12}>
+                  <Grid item sm={3}>
+                    <Typography variant='h6'>{accountAddress}</Typography>
+                  </Grid>
+                  <Grid item sm={3}>
+                    <Typography variant='h6'>{balance}</Typography>
+                  </Grid>
+                </Grid>
+              )}
+
             </Paper>
           </Grid>
         </Grid>
