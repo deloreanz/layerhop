@@ -57,7 +57,8 @@ const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNet
 
 // const getStateChannels = async () => connextSdk.getStateChannels();
 
-const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
+const getEstimatedFee = async (input, isRecipientAssetInput) => {
+  if (typeof isRecipientAssetInput !== 'boolean') isRecipientAssetInput = true;
   if (!input) throw new Error('input param required');
   if (typeof input !== 'string') {
     input = input + '';
@@ -165,21 +166,25 @@ const depositToChannel = async (webProvider, transferAmount) => {
   }
 };
 
-const withdraw = async amount => {
-  // get browsre node
+const withdraw = async (options) => {
+  const { tokenAmount, tokenAddress, recipientAddress, fee = '0', callTo, callData, } = options;
+  // get browser node
   const node = connextSdk.browserNode;
-  if (typeof amount !== 'string') {
-    amount = amount.toString();
+  if (typeof tokenAmount !== 'string') {
+    tokenAmount = tokenAmount.toString();
   }
-
-  const channelAddress = '0x770Dc065140827632c4b413c037b7f9Bb86E9D65';
+  // const channelAddress = '0x770Dc065140827632c4b413c037b7f9Bb86E9D65';
   // const amount = BigNumber.from(amount.toString()).toString();
   const result = await node.withdraw({
-    channelAddress,
-    amount,
-    assetId: '0x15f0ca26781c3852f8166ed2ebce5d18265cceb7',
-    recipient: '0x547f796Ca7079765Bf6f6d4c00094a394E665948',
-    fee: '0',
+    channelAddress: connextSdk.recipientChainChannelAddress,
+    amount: tokenAmount,
+    assetId: tokenAddress,
+    recipient: recipientAddress,
+    // assetId: '0x15f0ca26781c3852f8166ed2ebce5d18265cceb7',
+    // recipient: '0x547f796Ca7079765Bf6f6d4c00094a394E665948',
+    fee,
+    callTo,
+    callData,
   });
   return result;
 };

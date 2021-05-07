@@ -89,6 +89,18 @@ export default {
             5: '0x88271d333c72e51516b67f5567c728e702b3eee8',
             80001: '0x15f0ca26781c3852f8166ed2ebce5d18265cceb7',
           },
+          fDAIx: {
+            5: '0xf2d68898557ccb2cf4c10c3ef2b034b2a69dad00',
+            80001: '0x5d8b4c2554aeb7e86f387b4d6c00ac33499ed01f',
+          },
+          fUSDC: {
+            5: '0xc94dd466416a7dfe166ab2cf916d3875c049ebb7',
+            80001: '0xbe49ac1eadac65dccf204d4df81d650b50122ab2',
+          },
+          fUSDCx: {
+            5: '0x8ae68021f6170e5a766be613cea0d75236ecca9a',
+            80001: '0x42bb40bf79730451b11f6de1cba222f17b87afd7',
+          },
         },
       },
     },

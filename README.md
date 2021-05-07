@@ -13,6 +13,10 @@ https://dev.to/dabit3/the-complete-guide-to-full-stack-ethereum-development-3j13
 
 ## Working with testnets
 
+## Connext Router
+use this repo to bootstrap a local Connext router, along with a properly configured `.env` and `data/vectorConfig/config.js`.
+https://github.com/connext/vector-router-docker-compose
+
 ### Faucets
 Gets Polygon/Matic and Ethereum/Goerli testnet coins (MATIC, DERC20/TEST, LINK) from this faucet.  Once the coins are transfered, you can get their addresses to add to Metamask so their balances will show up.
 https://faucet.matic.network/

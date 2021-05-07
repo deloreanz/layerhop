@@ -11,7 +11,8 @@ import {
   Paper,
   TextField,
 } from '@material-ui/core';
-import { ethers, providers, BigNumber, } from 'ethers';
+import AppDialog from './components/AppDialog.js';
+import { ethers, providers, BigNumber, utils, } from 'ethers';
 import SuperfluidSDK from '@superfluid-finance/js-sdk/src';
 // import Greeter from './artifacts/contracts/Greeter.sol/Greeter.json';
 import GasPrice from './components/GasPrice.js';
@@ -80,7 +81,7 @@ export default () => {
   const [toBalances, setToBalances] = useState();
   // ACTIONS: plotCourse, ship, unlockCollateral
   // SHIP STATE: cargoReady, shipReady, shipArrived, cargoDelivered, collateralUnlocked
-  const [shipState, setShipState] = useState();
+  const [appState, setAppState] = useState('init');
   const [tokenToShipAddress, setTokenToShipAddress] = useState();
   const [tokenToShip, setTokenToShip] = useState();
   const [tokenToShipAmount, setTokenToShipAmount] = useState(4 * Math.pow(10, 18));
@@ -96,9 +97,10 @@ export default () => {
   const [layerhopContractFrom, setLayerhopContractFrom] = useState();
   const [layerhopContractTo, setLayerhopContractTo] = useState();
   const [tokenAllowanceFrom, setTokenAllowanceFrom] = useState();
-  // erc20 contracts
-  // const [erc20From, setErc20From] = useState();
-  // const [erc20To, setErc20To] = useState();
+  // dialog
+  const [dialogIsOpen, setDialogIsOpen] = useState(false);
+  const [dialogToken, setDialogToken] = useState();
+  
 
   // const ticker = () => {
   //   console.log('balances ....', balances);
@@ -154,7 +156,9 @@ export default () => {
     // @todo check on an interval
     // get balances
     const getBalances = async () => {
-      setLayerhopBalancesTo(await layerhopContractTo.getBalance(address, tokenAddressTo));
+      let balance = await layerhopContractTo.getBalance(address, tokenAddressTo);
+      // balance = balance.div(Math.pow(10, 18).toString());//.toFixed(6)};
+      setLayerhopBalancesTo(balance);
     };
     getBalances();
   }, [networkIdTo, networkType, config, tokenAddressTo]);
@@ -464,15 +468,14 @@ export default () => {
     // );
     const res = await preTransferCheck(tokenToShipAmount + '');
     console.log('depositToChannel res', res);
+    setAppState('depositComplete');
     return res;
   };
 
-  // OLD 5 - SHIP CARGO (CAPTAIN ACTION)
-  const shipTokens = async transferAmount => {
-    if (!estimate.transferQuote) throw new Error('estimate.transferQuote is required to perform a cross chain swap');
+  // 5 - SHIP CARGO (CAPTAIN ACTION)
+  const channelWithdraw = async () => {
+    // if (!estimate.transferQuote) throw new Error('estimate.transferQuote is required to perform a cross chain swap');
     
-    // await crossChainSwap(toNetworkAddress, estimate.transferQuote);
-
     const tokenToShipAmountBn = BigNumber.from(
       // utils.parseUnits(input, connextSdk.senderChain.assetDecimals)
       tokenToShipAmount + '', 18
@@ -492,32 +495,62 @@ export default () => {
           // @todo fix this to only be for user 1 once batching is enabled
           // tokenToShipAmount / Math.pow(10, 18),
           // no idea why this needs to be divided 10^18
-          tokenToShipAmountBn.div(Math.pow(10, 18).toString()).toString(),
+          // tokenToShipAmountBn.div(Math.pow(10, 18).toString()).toString(),
+          tokenToShipAmountBn.toString(),
           // param5 - null
           0x0,
           // param6 - null
           0x0,
         ],
+        // @todo batch plans here
       ],
     });
     console.log('withdrawCallData:', withdrawCallData);
-    console.log(config.layerhop.networks[networkIdTo]);
-    console.log(config.layerhop.networks[networkIdTo].contractAddress);
 
-    const params = {
+    // browserNode fields:
+    // public routerPublicIdentifier = "";
+    // public senderChainChannelAddress = "";
+    // public recipientChainChannelAddress = "";
+    // public crossChainTransferId = "";
+    // public senderChainChannel?: FullChannelState;
+    // public recipientChainChannel?: FullChannelState;
+    // public senderChain?: ChainDetail;
+    // public recipientChain?: ChainDetail;
+    // public browserNode?: BrowserNode;
+
+    // const params = {
+    //   recipientAddress: config.layerhop.networks[networkIdTo].contractAddress,
+    //   transferQuote: estimate.transferQuote,
+    //   // withdrawCallTo: config.layerhop.networks[networkIdTo].contractAddress,
+    //   // withdrawCallData,
+    //   // generateCallData,
+    //   onTransferred: () => console.log(`cross chain swap transfered: `),
+    //   onFinished: (txHash, amountUi, amountBn) => console.log(`cross chain swap finished: `, txHash, amountUi, amountBn), // onFinished callback function,
+    // };
+    const withdrawParams = {
+      tokenAmount: tokenToShipAmountBn.toString(),
+      tokenAddress: tokenAddressTo,
       recipientAddress: config.layerhop.networks[networkIdTo].contractAddress,
-      transferQuote: estimate.transferQuote,
-      // withdrawCallTo: config.layerhop.networks[networkIdTo].contractAddress,
-      // withdrawCallData,
-      // generateCallData,
-      onTransferred: () => console.log(`cross chain swap transfered: `),
-      onFinished: (txHash, amountUi, amountBn) => console.log(`cross chain swap finished: `, txHash, amountUi, amountBn), // onFinished callback function,
+      // fee,
+      callTo: config.layerhop.networks[networkIdTo].contractAddress,
+      callData: withdrawCallData,
     };
-    console.log('calling crossChainSwap with params:');
-    console.log(params);
+    console.log('calling withdraw with withdrawParams:');
+    console.log(withdrawParams);
 
-    const connextWithdraw = await crossChainSwap(params);
-    console.log('connextWithdraw', connextWithdraw);
+    // const connextWithdraw = await crossChainSwap(params);
+
+    // const amount = BigNumber.from((3 * Math.pow(10, 18)).toString()).toString();
+    const { isError, error, value } = await withdraw(withdrawParams);
+    console.log('channelWithdraw res');
+    if (isError || error) throw new Error('Error in withdraw:', error);
+    if (value) {
+      console.log('connextWithdraw success!');
+      console.log('value', value);
+      const txHash = value.transactionHash;
+      console.log('txHash', txHash);
+      return value;
+    }
 
     // const connextWithdraw = await withdraw({
     //   assetId: tokenToShipAddress,
@@ -538,21 +571,6 @@ export default () => {
     // const providerFrom = getProvider(networkId);
     // let receipt = await providerFrom.waitForTransaction(tx);
     // console.log('connextWithdraw receipt: ', receipt);
-  };
-
-  // 5 - SHIP CARGO (CAPTAIN ACTION)
-  const channelWithdraw = async () => {
-    const amount = 3 * Math.pow(10, 18);
-    const { isError, value } = await withdraw(amount);
-    console.log('channelWithdraw res');
-    if (isError) throw new Error('Error in withdraw.');
-    if (value) {
-      console.log('value', value);
-      const txHash = value.transactionHash;
-      console.log('txHash', txHash);
-      return value;
-    }
-    return false;
   };
 
   const getTokenSymbolByAddress = tokenAddress => {
@@ -637,7 +655,16 @@ export default () => {
                   <Grid item sm={4}>
                     <Typography>{balance.toFixed(6)}</Typography>
                   </Grid>
-                  <Grid>{getRateArrow(rate)}</Grid>
+                  <Grid item sm={1}>{getRateArrow(rate)}</Grid>
+                  <Grid item sm={3}>
+                    <Button
+                      onClick={() => {
+                        setTokenToShipAddress(tokenAddress);
+                        setTokenToShip(getTokenSymbolByAddress(tokenAddress));
+                        setDialogIsOpen(true);
+                      }}
+                    >Plan</Button>
+                  </Grid>
                 </Grid>
               )}
               <Grid item sm={12}>
@@ -653,100 +680,20 @@ export default () => {
                   </Grid>
                   <Grid item sm={3}>
                     <Button
-                      onClick={() => setTokenToShipAddress(entry.tokenAddress)}
-                    >{'Ship =>'}</Button>
+                      onClick={() => {
+                        setTokenToShipAddress(entry.tokenAddress);
+                        setTokenToShip(getTokenSymbolByAddress(entry.tokenAddress));
+                        setDialogIsOpen(true);
+                      }}
+                    >Plan</Button>
                   </Grid>
                 </Grid>
               )}
             </Paper>
           </Grid>
-          <Grid container item sm={2}>
-            <Paper className={classes.networkBlock}>
-              <Grid item sm={12}>
-                <Typography justify='center'>Ship ⚓</Typography>
-              </Grid>
-              <Grid item sm={12}>
-                <Typography justify='center'>Manifest 📋 📦📦📦</Typography>
-                <Typography>{tokenToShip} to ship:</Typography>
-                <TextField
-                  id="outlined-basic" 
-                  label="Outlined"
-                  variant="outlined"
-                  value={tokenToShipAmount / Math.pow(10, 18)}
-                  onChange={event => {
-                    let value = parseFloat(event.currentTarget.value);
-                    if (isNaN(value)) value = 0;
-                    console.log('setting tokens to ship to: ', value);
-                    setTokenToShipAmount(value * Math.pow(10, 18));
-                  }}
-                />
-              </Grid>
-              <Grid item sm={12}>
-                <Typography>Allowance: {tokenAllowanceFrom / Math.pow(10, 18)}</Typography>
-                <Typography>can transfer: {moreAllowanceNeeded() ? 'no' : 'yes'}</Typography>
-                <Typography>Need to approve: {getNeededAllowance() / Math.pow(10, 18)}</Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  disabled={!moreAllowanceNeeded()}
-                  onClick={() => approveERC20()}
-                >1 - Approve</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => depositTokensToLayerhop()}
-                >2 - Prep Cargo</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => openStateChannel()}
-                >3 - Request a Boat</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  disabled={!estimate || !estimate.transferQuote}
-                  onClick={() => depositToChannel()}
-                >4 - Load Cargo on Boat</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  disabled={!estimate || !estimate.transferQuote}
-                  onClick={() => shipTokens(tokenToShipAmount)}
-                >5 - Ship Cargo!</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  onClick={async () => {
-                    // now estimate a fee to deposit
-                    const thisEstimate = await getEstimatedFee(tokenToShipAmount);
-                    console.log('Fee estimate:', thisEstimate);
-                    setEstimate(thisEstimate);
-                  }}
-                >Get Estimate</Button>
-              </Grid>
-              <Grid item sm={12}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  onClick={async () => {
-                    await channelWithdraw();
-                  }}
-                >Withdraw</Button>
-              </Grid>
-              
 
-            </Paper>
-          </Grid>
+          <Grid container item sm={2}></Grid>
+
           <Grid container item sm={3}>
             <Paper className={classes.networkBlock}>
               <Grid item sm={12}>
@@ -777,6 +724,9 @@ export default () => {
                 <Typography variant='h6'>{tokenToShip}:</Typography>
               </Grid>
               {layerhopBalancesFrom && (parseInt(layerhopBalancesFrom) / Math.pow(10, 18)).toFixed(6)}
+
+              <Typography variant='h6' justify='center'>Shipping Plans 📋</Typography>
+              📦📦📦
               {layerhopBalancesFrom && layerhopBalancesFrom[tokenToShipAddress] && 
               Object.entries(layerhopBalancesFrom[tokenToShipAddress]).map(([accountAddress, balance]) =>
                 <Grid container item sm={12}>
@@ -791,7 +741,54 @@ export default () => {
             </Paper>
           </Grid>
 
-          <Grid container item sm={2}></Grid>
+          <Grid container item sm={2}>
+            <Paper className={classes.networkBlock}>
+              <Grid item justify='center' sm={12}>
+                <Typography>Ship ⚓</Typography>
+              </Grid>
+              
+              <Grid item sm={12}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => openStateChannel()}
+                >Captain</Button>
+              </Grid>
+              {estimate && estimate.transferQuote &&
+                <Grid item sm={12}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    disabled={!estimate || !estimate.transferQuote}
+                    onClick={() => depositToChannel()}
+                  >Load Cargo</Button>
+                </Grid>
+              }
+              {appState === 'depositComplete' &&
+                <Grid item sm={12}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    disabled={!estimate || !estimate.transferQuote}
+                    onClick={async() => await channelWithdraw()}
+                  >Ship Cargo!</Button>
+                </Grid>
+              }
+
+              {/* <Grid item sm={12}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  onClick={async () => {
+                    // now estimate a fee to deposit
+                    const thisEstimate = await getEstimatedFee(tokenToShipAmount);
+                    console.log('Fee estimate:', thisEstimate);
+                    setEstimate(thisEstimate);
+                  }}
+                >Get Estimate</Button>
+              </Grid> */}
+            </Paper>
+          </Grid>
 
           <Grid container item spacing={3} sm={3}>
             <Paper className={classes.networkBlock}>
@@ -802,7 +799,8 @@ export default () => {
               <Grid item sm={12}>
                 <Typography variant='h6'>{tokenToShip}:</Typography>
               </Grid>
-              {layerhopBalancesTo && (parseInt(layerhopBalancesTo) / Math.pow(10, 18)).toFixed(6)}
+              {layerhopBalancesTo && utils.formatEther(layerhopBalancesTo.toString())}
+              {/* / Math.pow(10, 18)).toFixed(6)} */}
               {layerhopBalancesTo && layerhopBalancesTo[tokenAddressTo] && 
               Object.entries(layerhopBalancesTo[tokenAddressTo]).map(([accountAddress, balance]) =>
                 <Grid container item sm={12}>
@@ -820,6 +818,22 @@ export default () => {
         </Grid>
 
       </Grid>
+
+      <AppDialog
+        dialogToken={dialogToken}
+        isOpen={dialogIsOpen}
+        setIsOpen={setDialogIsOpen}
+        // onClose={}
+        tokenAllowanceFrom={tokenAllowanceFrom}
+        moreAllowanceNeeded={moreAllowanceNeeded}
+        getNeededAllowance={getNeededAllowance}
+        approveERC20={approveERC20}
+        tokenToShip={tokenToShip}
+        tokenToShipAmount={tokenToShipAmount}
+        setTokenToShipAmount={setTokenToShipAmount}
+        depositTokensToLayerhop={depositTokensToLayerhop}
+      />
+
     </div>
   );
 };
