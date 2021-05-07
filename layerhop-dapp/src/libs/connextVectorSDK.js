@@ -31,8 +31,6 @@ const initConnext = async ({ connextNetwork, loginProvider, fromNetworkId, toNet
     throw new Error(`Unsupported 'to' network id: ${toNetworkId}`);
   }
   try {
-    console.log(config.connext);
-    console.log(connextNetwork);
     const connextRes = await connextSdk.init({
       routerPublicIdentifier: config.connext.network[connextNetwork].publicId, // Router Public Identifier
       loginProvider, // Web3/JsonRPCProvider
@@ -64,6 +62,8 @@ const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
   if (typeof input !== 'string') {
     input = input + '';
   }
+  // NOTE: estimateFees expects a ETH, not wei value
+  input = BigNumber.from(input).div(Math.pow(10, 18).toString()).toString();
   try {
     const res = await connextSdk.estimateFees({
       transferAmount: input,
@@ -79,9 +79,14 @@ const getEstimatedFee = async (input, isRecipientAssetInput=true) => {
 };
 
 const preTransferCheck = async transferAmount => {
-  if (typeof transferAmount !== 'string') {
-    transferAmount = transferAmount + '';
-  }
+  if (typeof transferAmount !== 'string') throw new Error('transferAmount param must be a string');
+  // if (transferAmount instanceof BigNumber === false) {
+  //   throw new Error('preTransferCheck requires BigNumber as input amount');
+  // }
+  // @todo not sure why this is needed, but have to divide by 18, perhaps 'deposit' expects this
+  transferAmount = BigNumber.from(transferAmount + '');
+  transferAmount = transferAmount.div(Math.pow(10, 18) + '');
+  transferAmount = transferAmount.toString();
   try {
     return await connextSdk.deposit({
       transferAmount,
@@ -98,7 +103,7 @@ const preTransferCheck = async transferAmount => {
   }
 };
 
-const crossChainSwap = async (withdrawalAddress, transferQuote) => {
+const crossChainSwap = async ({ withdrawalAddress, transferQuote }) => {
   if (!transferQuote) throw new Error('param transferQuote is required');
   try {
     // connextSdk.withdraw({  })
@@ -123,7 +128,7 @@ const getWithdrawAddress = () => {
   return connextSdk.recipientChainChannelAddress;
 };
 
-const deposit = async (webProvider, transferAmount) => {
+const depositToChannel = async (webProvider, transferAmount) => {
   try {
     await connextSdk.preTransferCheck(transferAmount);
   } catch (e) {
@@ -160,8 +165,23 @@ const deposit = async (webProvider, transferAmount) => {
   }
 };
 
-const withdraw = async () => {
+const withdraw = async amount => {
+  // get browsre node
+  const node = connextSdk.browserNode;
+  if (typeof amount !== 'string') {
+    amount = amount.toString();
+  }
 
+  const channelAddress = '0x770Dc065140827632c4b413c037b7f9Bb86E9D65';
+  // const amount = BigNumber.from(amount.toString()).toString();
+  const result = await node.withdraw({
+    channelAddress,
+    amount,
+    assetId: '0x15f0ca26781c3852f8166ed2ebce5d18265cceb7',
+    recipient: '0x547f796Ca7079765Bf6f6d4c00094a394E665948',
+    fee: '0',
+  });
+  return result;
 };
 
 export {
@@ -170,7 +190,7 @@ export {
   getEstimatedFee,
   getDepositAddress,
   getWithdrawAddress,
-  deposit,
+  depositToChannel,
   preTransferCheck,
   crossChainSwap,
   withdraw,
