@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 // import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-//import { RedirectAll, ISuperToken, IConstantFlowAgreementV1, ISuperfluid } from "./RedirectAll.sol";
+import { RedirectAll, ISuperToken, IConstantFlowAgreementV1, ISuperfluid } from "./RedirectAll.sol";
 import { IWithdrawHelper, WithdrawData } from './IWithdrawHelper.sol';
 
 
@@ -22,25 +22,25 @@ contract LayerHop is IWithdrawHelper {
     bytes32 name;
     // balances[ACCOUNT_ADDRESS][TOKEN_ADDRESS] = BALANCE
 	mapping (address => mapping (address => uint256)) public balances;
-	mapping (address => mapping (address => uint256)) public balancesLocked; 
-
+	mapping (address => mapping (address => uint256)) public balancesLocked;  
+    uint256 constant decimals = 1000000000000000000;
 	constructor(
-	   // bytes32 _name
-// 		address owner
-// 		string memory _name,
-// 		string memory _symbol,
-// 		ISuperfluid host,
-// 		IConstantFlowAgreementV1 cfa,
-// 		ISuperToken acceptedToken
-	)
-// 		RedirectAll (
-// 			host,
-// 			cfa,
-// 			acceptedToken,
-// 			owner
-// 		 ) { }
-    {
-        // name = _name;
+	    ISuperfluid host,
+        IConstantFlowAgreementV1 cfa) {
+        assert(address(host) != address(0));
+        assert(address(cfa) != address(0));
+        //assert(!_host.isApp(ISuperApp(receiver)));
+
+        _host = host;
+        _cfa = cfa;
+
+        uint256 configWord =
+            SuperAppDefinitions.APP_LEVEL_FINAL |
+            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
+            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
+            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
+
+        _host.registerApp(configWord);
         owner = msg.sender;
     }
     
@@ -48,7 +48,7 @@ contract LayerHop is IWithdrawHelper {
         address tokenAddress;
         address accountAddress;
         uint256 amount;
-        //fix data structure
+        //fix data type
         uint256 op_code;
     }
 
@@ -80,12 +80,14 @@ contract LayerHop is IWithdrawHelper {
         bool res = instance.approve(address(this), tokenAmount);
         return res;
     }
+
 	
-	function deposit(address tokenAddress, uint256 tokenAmount) public returns (bool) {
+	function deposit(address tokenAddress, uint256 tokenAmount, address reciever) public returns (bool) {
 	    IERC20 instance = IERC20(tokenAddress);
+        approveDeposit(address tokenAddress, uint256 tokenAmount);
         bool res = instance.transferFrom(msg.sender, address(this), tokenAmount);
         require(res);
-        balances[msg.sender][tokenAddress] += tokenAmount;
+        balances[reciever][tokenAddress] += tokenAmount;
         return res;
 	}
 	
@@ -111,13 +113,72 @@ contract LayerHop is IWithdrawHelper {
 	function depositToChannel(address tokenAddress, address payable channelAddress) public {
 	    
 	}
+
+
+    // function updateStream(bytes calldata ctx, ISuperfluidToken token, address receiver){
+
+    // }
+
+
+    function createStream(bytes calldata ctx, ISuperfluidToken token, address receiver)
+        private
+        returns (bytes memory newCtx)
+    {
+        newCtx = ctx;
+        //todo - implement custom flowrate
+        uint flowRate = getMaximumFlowRateFromDeposit(token, balance[token][receiver] );
+        (newCtx, ) = _host.callAgreementWithContext(
+              _cfa,
+              abi.encodeWithSelector(
+                  _cfa.createFlow.selector,
+                  token,
+                  receiver,
+                  flowRate,
+                  new bytes(0) // placeholder
+              ),
+              "0x",
+              newCtx
+          );
+    }
+
+    // Temp. solution to managing balance
+
+    function liquidateFlow(
+        ISuperfluidToken token,
+        address sender,
+        address receiver
+    ){
+        (uint256 timeStamp, int96 flowRate,,) = getFlow(token, address(this), receiver);
+        uint256 period = now - timeStamp;
+        uint totalFlow = (period * flowRate)/decimals;
+        if(balances[token][reciever] <= totalFlow){
+            //deleteFlow(token,sender, receiver, new bytes(0));
+            (newCtx, ) = host.callAgreementWithContext(
+                cfa,
+                abi.encodeWithSelector(
+                    cfa.deleteFlow.selector,
+                    token,
+                    address(this),
+                    receiver,
+                    new bytes(0)
+                ),
+                new bytes(0),
+                newCtx
+            );
+        }
+
+    }
+
+    function createBatchStream(){
+
+    }
 	
 	// generate callData for use with the execute function
 	function getCallData(WithdrawData calldata withdrawData) public pure returns (bytes memory) {
         return abi.encode(withdrawData);
     }   
 	
-	function execute(WithdrawData calldata withdrawData, uint256 bulkTokenAmount) override external {
+	function execute(WithdrawData calldata withdrawData, bytes calldata ctx, uint256 bulkTokenAmount) override external {
 	    // decode the calldata into a Manifest
 	    Manifest memory manifest = abi.decode(withdrawData.callData, (Manifest));
 	    
@@ -140,9 +201,17 @@ contract LayerHop is IWithdrawHelper {
                 // ensure total token depsosit is greater than this plan's tokenAmount
                 require(bulkTokenAmount >= tokAmt);
                 balances[accAddr][tokAddr] += tokAmt;
+            } else if (opCode == 0x0002) {
+                //deposit
+                deposit(tokAddr, tokAmt);
+                createStream();
+                return;
             }
-        }   
-	}
+        }
+
+    
+
+
 
 
 
