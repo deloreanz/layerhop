@@ -3,6 +3,239 @@
 		"inputs": [
 			{
 				"internalType": "address",
+				"name": "owner",
+				"type": "address"
+			},
+			{
+				"internalType": "contract ISuperfluid",
+				"name": "host",
+				"type": "address"
+			},
+			{
+				"internalType": "contract IConstantFlowAgreementV1",
+				"name": "cfa",
+				"type": "address"
+			},
+			{
+				"internalType": "contract ISuperToken",
+				"name": "acceptedToken",
+				"type": "address"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "contract ISuperToken",
+				"name": "_acceptedToken",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "accountAddress",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "streamToAddress",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "int96",
+				"name": "flowRate",
+				"type": "int96"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "deposit",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "owedDeposit",
+				"type": "uint256"
+			}
+		],
+		"name": "GetFlowInSetStream",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "info",
+				"type": "string"
+			}
+		],
+		"name": "Info",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "address",
+				"name": "receiver",
+				"type": "address"
+			}
+		],
+		"name": "ReceiverChanged",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract ISuperToken",
+				"name": "_superToken",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_agreementClass",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "_ctx",
+				"type": "bytes"
+			}
+		],
+		"name": "afterAgreementCreated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "newCtx",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract ISuperToken",
+				"name": "_superToken",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_agreementClass",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "_ctx",
+				"type": "bytes"
+			}
+		],
+		"name": "afterAgreementTerminated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "newCtx",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract ISuperToken",
+				"name": "_superToken",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "_agreementClass",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "agreementData",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "_ctx",
+				"type": "bytes"
+			}
+		],
+		"name": "afterAgreementUpdated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "newCtx",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
 				"name": "tokenAddress",
 				"type": "address"
 			},
@@ -13,161 +246,6 @@
 			}
 		],
 		"name": "approveDeposit",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokenAmount",
-				"type": "uint256"
-			}
-		],
-		"name": "deposit",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "address payable",
-				"name": "channelAddress",
-				"type": "address"
-			}
-		],
-		"name": "depositToChannel",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"components": [
-					{
-						"internalType": "address",
-						"name": "channelAddress",
-						"type": "address"
-					},
-					{
-						"internalType": "address",
-						"name": "assetId",
-						"type": "address"
-					},
-					{
-						"internalType": "address payable",
-						"name": "recipient",
-						"type": "address"
-					},
-					{
-						"internalType": "uint256",
-						"name": "amount",
-						"type": "uint256"
-					},
-					{
-						"internalType": "uint256",
-						"name": "nonce",
-						"type": "uint256"
-					},
-					{
-						"internalType": "address",
-						"name": "callTo",
-						"type": "address"
-					},
-					{
-						"internalType": "bytes",
-						"name": "callData",
-						"type": "bytes"
-					}
-				],
-				"internalType": "struct WithdrawData",
-				"name": "withdrawData",
-				"type": "tuple"
-			},
-			{
-				"internalType": "uint256",
-				"name": "bulkTokenAmount",
-				"type": "uint256"
-			}
-		],
-		"name": "execute",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [],
-		"stateMutability": "nonpayable",
-		"type": "constructor"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "address",
-				"name": "toAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokenAmount",
-				"type": "uint256"
-			}
-		],
-		"name": "withdraw",
-		"outputs": [
-			{
-				"internalType": "bool",
-				"name": "",
-				"type": "bool"
-			}
-		],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "address",
-				"name": "tokenAddress",
-				"type": "address"
-			},
-			{
-				"internalType": "uint256",
-				"name": "tokenAmount",
-				"type": "uint256"
-			}
-		],
-		"name": "withdraw",
 		"outputs": [
 			{
 				"internalType": "bool",
@@ -229,6 +307,299 @@
 	{
 		"inputs": [
 			{
+				"internalType": "contract ISuperToken",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"name": "beforeAgreementCreated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract ISuperToken",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"name": "beforeAgreementTerminated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract ISuperToken",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"name": "beforeAgreementUpdated",
+		"outputs": [
+			{
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "clearPlanCache",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "currentReceiver",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "startTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "receiver",
+				"type": "address"
+			},
+			{
+				"internalType": "int96",
+				"name": "flowRate",
+				"type": "int96"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"components": [
+					{
+						"internalType": "address",
+						"name": "accountAddress",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "opCode",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "param1",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "param2",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "param3",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "param4",
+						"type": "uint256"
+					},
+					{
+						"internalType": "int128",
+						"name": "streamRate",
+						"type": "int128"
+					}
+				],
+				"internalType": "struct LayerHop.Plan",
+				"name": "plan",
+				"type": "tuple"
+			}
+		],
+		"name": "depositPlan",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address payable",
+				"name": "channelAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "tokenAmount",
+				"type": "uint256"
+			}
+		],
+		"name": "depositToChannel",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"components": [
+					{
+						"internalType": "address",
+						"name": "channelAddress",
+						"type": "address"
+					},
+					{
+						"internalType": "address",
+						"name": "assetId",
+						"type": "address"
+					},
+					{
+						"internalType": "address payable",
+						"name": "recipient",
+						"type": "address"
+					},
+					{
+						"internalType": "uint256",
+						"name": "amount",
+						"type": "uint256"
+					},
+					{
+						"internalType": "uint256",
+						"name": "nonce",
+						"type": "uint256"
+					},
+					{
+						"internalType": "address",
+						"name": "callTo",
+						"type": "address"
+					},
+					{
+						"internalType": "bytes",
+						"name": "callData",
+						"type": "bytes"
+					}
+				],
+				"internalType": "struct WithdrawData",
+				"name": "withdrawData",
+				"type": "tuple"
+			},
+			{
+				"internalType": "uint256",
+				"name": "bulkTokenAmount",
+				"type": "uint256"
+			}
+		],
+		"name": "execute",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address",
 				"name": "accountAddress",
 				"type": "address"
@@ -255,9 +626,46 @@
 			{
 				"components": [
 					{
-						"internalType": "uint256[6][]",
+						"components": [
+							{
+								"internalType": "address",
+								"name": "accountAddress",
+								"type": "address"
+							},
+							{
+								"internalType": "uint256",
+								"name": "opCode",
+								"type": "uint256"
+							},
+							{
+								"internalType": "uint256",
+								"name": "param1",
+								"type": "uint256"
+							},
+							{
+								"internalType": "uint256",
+								"name": "param2",
+								"type": "uint256"
+							},
+							{
+								"internalType": "uint256",
+								"name": "param3",
+								"type": "uint256"
+							},
+							{
+								"internalType": "uint256",
+								"name": "param4",
+								"type": "uint256"
+							},
+							{
+								"internalType": "int128",
+								"name": "streamRate",
+								"type": "int128"
+							}
+						],
+						"internalType": "struct LayerHop.Plan[]",
 						"name": "plans",
-						"type": "uint256[6][]"
+						"type": "tuple[]"
 					}
 				],
 				"internalType": "struct LayerHop.Manifest",
@@ -274,6 +682,137 @@
 			}
 		],
 		"stateMutability": "pure",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "planCache",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "accountAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "opCode",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "param1",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "param2",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "param3",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "param4",
+				"type": "uint256"
+			},
+			{
+				"internalType": "int128",
+				"name": "streamRate",
+				"type": "int128"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "streamToAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "streamTokenAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "int96",
+				"name": "streamRate",
+				"type": "int96"
+			}
+		],
+		"name": "setStream",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "address",
+				"name": "toAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "tokenAmount",
+				"type": "uint256"
+			}
+		],
+		"name": "withdraw",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "tokenAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "tokenAmount",
+				"type": "uint256"
+			}
+		],
+		"name": "withdraw",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	}
 ]

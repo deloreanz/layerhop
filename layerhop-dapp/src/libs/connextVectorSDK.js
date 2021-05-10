@@ -104,14 +104,16 @@ const preTransferCheck = async transferAmount => {
   }
 };
 
-const crossChainSwap = async ({ withdrawalAddress, transferQuote }) => {
+const crossChainSwap = async ({ withdrawalAddress, transferQuote, withdrawCallData, withdrawCallTo, }) => {
+  if (!withdrawalAddress) withdrawalAddress = connextSdk.recipientChainChannelAddress;
   if (!transferQuote) throw new Error('param transferQuote is required');
+  
   try {
-    // connextSdk.withdraw({  })
     await connextSdk.crossChainSwap({
       transferQuote,
       recipientAddress: withdrawalAddress, // Recipient Address
-      // onTransferred:
+      withdrawCallTo,
+      withdrawCallData,
       onTransferred: (a, b, c) => console.log(`cross chain swap transfered: `, a, b, c),
       onFinished: (toNetworkTxHash, x, y, z) => console.log(`cross chain swap finished: `, toNetworkTxHash, x, y, z), // onFinished callback function
     });
@@ -166,13 +168,40 @@ const depositToChannel = async (webProvider, transferAmount) => {
   }
 };
 
-const withdraw = async (options) => {
+const transfer = async ({ transferQuote, }) => {
+  return await connextSdk.transfer({
+    transferQuote,
+    onTransferred: (a, b, c) => {
+      console.log('connext transfer done:', a, b, c);
+    },
+  });
+};
+
+const withdraw = async options => {
   const { tokenAmount, tokenAddress, recipientAddress, fee = '0', callTo, callData, } = options;
   // get browser node
   const node = connextSdk.browserNode;
   if (typeof tokenAmount !== 'string') {
     tokenAmount = tokenAmount.toString();
   }
+
+
+//   const transferRes = await node.conditionalTransfer({
+//     type: 'HashlockTransfer',
+//     channelAddress: connextSdk.senderChainChannelAddress,
+//     amount: '1000000000000000000',
+//     assetId: connextSdk.swapDefinition.fromAssetId,
+//     details: {
+//         lockHash: '0xlockHash...',
+//         expiry: '0',
+//     },
+//     // recipient: node.publicIdentifier,
+//     recipient: node.routerPublicIdentifier,
+//     meta: { 
+//       requireOnline: true,
+//     },
+// });
+
   // const channelAddress = '0x770Dc065140827632c4b413c037b7f9Bb86E9D65';
   // const amount = BigNumber.from(amount.toString()).toString();
   const result = await node.withdraw({
@@ -180,11 +209,9 @@ const withdraw = async (options) => {
     amount: tokenAmount,
     assetId: tokenAddress,
     recipient: recipientAddress,
-    // assetId: '0x15f0ca26781c3852f8166ed2ebce5d18265cceb7',
-    // recipient: '0x547f796Ca7079765Bf6f6d4c00094a394E665948',
     fee,
-    callTo,
-    callData,
+    // callTo,
+    // callData,
   });
   return result;
 };
@@ -198,5 +225,6 @@ export {
   depositToChannel,
   preTransferCheck,
   crossChainSwap,
+  transfer,
   withdraw,
 };

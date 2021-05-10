@@ -16,7 +16,8 @@ import { ethers, providers, BigNumber, utils, } from 'ethers';
 import SuperfluidSDK from '@superfluid-finance/js-sdk/src';
 // import Greeter from './artifacts/contracts/Greeter.sol/Greeter.json';
 import GasPrice from './components/GasPrice.js';
-import { initConnext, getEstimatedFee, preTransferCheck, crossChainSwap, withdraw, getWithdrawAddress, } from './libs/connextVectorSDK.js';
+import { initConnext, getEstimatedFee, preTransferCheck,
+  crossChainSwap, transfer, withdraw, getWithdrawAddress, getDepositAddress, } from './libs/connextVectorSDK.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { getBalances } from './libs/covalentAPI.js';
 // import erc20 from './libs/erc20.js';
@@ -84,7 +85,7 @@ export default () => {
   const [appState, setAppState] = useState('init');
   const [tokenToShipAddress, setTokenToShipAddress] = useState();
   const [tokenToShip, setTokenToShip] = useState();
-  const [tokenToShipAmount, setTokenToShipAmount] = useState(4 * Math.pow(10, 18));
+  const [tokenToShipAmount, setTokenToShipAmount] = useState();
   const [tokenAddressTo, setTokenAddressTo] = useState();
   // balances = { address1: balance1, address2: balance  }
   const [fromSuperBalances, setFromSuperBalances] = useState([]);
@@ -96,10 +97,11 @@ export default () => {
   // contracts on 'from' and 'to' networks
   const [layerhopContractFrom, setLayerhopContractFrom] = useState();
   const [layerhopContractTo, setLayerhopContractTo] = useState();
-  const [tokenAllowanceFrom, setTokenAllowanceFrom] = useState();
   // dialog
   const [dialogIsOpen, setDialogIsOpen] = useState(false);
   const [dialogToken, setDialogToken] = useState();
+  // plans
+  const [layerhopPlansFrom, setLayerhopPlansFrom] = useState([]);
   
 
   // const ticker = () => {
@@ -147,6 +149,24 @@ export default () => {
     // set the 'to' network token address
     setTokenAddressTo(config.connext.network[networkType].tokens[tokenToShip][networkIdTo]);
   }, [networkId, config, tokenToShipAddress]);
+  useEffect(() => {
+    if (!layerhopContractFrom) return;
+    const getPlans = async () => {
+      // @todo get full list?
+      try {
+        const plan = await layerhopContractFrom.planCache(0);
+        setLayerhopPlansFrom([
+          // ...layerhopPlansFrom,
+            plan,
+        ]);
+        setTokenToShipAmount(plan.param2);
+      } catch (e) {
+        console.log('error getting planCache index');
+      }
+    };
+    getPlans();
+  }, [layerhopContractFrom]);
+
   // layerhop 'to' network contract
   useEffect(() => {
     if (!networkIdTo || !networkType || !config || !tokenAddressTo) return;
@@ -163,31 +183,11 @@ export default () => {
     getBalances();
   }, [networkIdTo, networkType, config, tokenAddressTo]);
 
-  // get allowance for layerhop on the 'from' chain for the selected erc20 token
-  useEffect(() => {
-    if (!config || !tokenToShipAddress || !address || !networkId) return;
-    var layerhopContractAddress = config.layerhop.networks[networkId].contractAddress;
-    const init = async () => {
-      const allowance = await erc20.allowance({
-        networkId,
-        tokenAddress: tokenToShipAddress,
-        // owner
-        owner: address,
-        // spender
-        // config.layerhop.networks[networkId].contractAddress);
-        spender: layerhopContractAddress,
-      });
-      console.log('from network token allowance:', allowance);
-      setTokenAllowanceFrom(allowance);
-    };
-    init();
-  }, [config, tokenToShipAddress, address, networkId]);
-
   // set the default token to ship
   useEffect(() => {
     // only run when tokenToShip is not set initially
     if (tokenToShip || !config || !networkType || !networkId) return;
-    const defaultTokenSymbol = 'fDAI';
+    const defaultTokenSymbol = 'fDAIx';
     const defaultTokenToShipAddress = Object.entries(config.superfluid.tokenByNetwork[networkType][networkId])
       .filter(([tokenAddress, entry]) => entry.symbol === defaultTokenSymbol);
     const thisAddress = defaultTokenToShipAddress[0][0];
@@ -262,6 +262,7 @@ export default () => {
           token: tokenAddress,
         });
         const details = await account.details();
+        console.log('SF user details', tokenAddress, details);
         const rate = parseInt(details.cfa.netFlow);
         const balance = await erc20.balanceOf({ networkId, tokenAddress, address });
         return {
@@ -402,35 +403,15 @@ export default () => {
   // }
 
   // 1- APPROVE (SHIPPER ACTION)
-  const approveERC20 = async () => {
-    // prep value as big number
-    const allowanceIncreaseBn = BigNumber.from(
-      // utils.parseUnits(input, connextSdk.senderChain.assetDecimals)
-      getNeededAllowance() + '', 18
-    );
-    console.log('allowanceIncreaseBn', allowanceIncreaseBn);
-    const layerhopContractAddress = config.layerhop.networks[networkId].contractAddress;
-    const res = await erc20.increaseAllowance({
-      networkId,
-      tokenAddress: tokenToShipAddress,
-      signer,
-      spender: layerhopContractAddress,
-      addedValue: allowanceIncreaseBn,
-    });
-    console.log('increaseAllowance res', res);
-    return res;
-  };
+  // in dialog
 
   // 2 - PREP CARGO (SHIPPER ACTION)
-  const depositTokensToLayerhop = async () => {
-    // prep value as big number
-    const tokenToShipAmountBn = BigNumber.from(
-      // utils.parseUnits(input, connextSdk.senderChain.assetDecimals)
-      tokenToShipAmount + '', 18
-    );
-    console.log('tokenToShipAmountBN', tokenToShipAmountBn.toString());
-    const res = await layerhopContractFrom.deposit(tokenToShipAddress, tokenToShipAmountBn);
+  const depositTokensToLayerhop = async plan => {
+    console.log('depositing plan: ', plan);
+    const res = await layerhopContractFrom.depositPlan(plan);
     console.log('depositTokensToLayerhop res', res);
+    // @todo detect tx completion and close modal, use spinner for status
+    
     return res;
   };
 
@@ -455,7 +436,8 @@ export default () => {
     console.log(`offChainSenderChainAssetBalanceBn: ${offChainSenderChainAssetBalanceBn}`);
     console.log(`offChainRecipientChainAssetBalanceBn: ${offChainRecipientChainAssetBalanceBn}`);
     // now estimate a fee to deposit
-    const thisEstimate = await getEstimatedFee(tokenToShipAmount);
+    const planTokenAmount = BigNumber.from(layerhopPlansFrom[0].param2.toString()).toString();
+    const thisEstimate = await getEstimatedFee(planTokenAmount);
     console.log('Fee estimate:', thisEstimate);
     setEstimate(thisEstimate);
   };
@@ -466,45 +448,68 @@ export default () => {
     //   // utils.parseUnits(input, connextSdk.senderChain.assetDecimals)
     //   tokenToShipAmount + '', 18
     // );
-    const res = await preTransferCheck(tokenToShipAmount + '');
+
+    // user is directly depositing to channel
+    // const res = await preTransferCheck(tokenToShipAmount + '');
+
+    // captain tells contract to deposit to channel
+    const planTokenAmount = BigNumber.from(layerhopPlansFrom[0].param2.toString()).toString();
+    console.log('calling contract depositToChannel with params:', getDepositAddress(), tokenToShipAddress, planTokenAmount);
+    const res = await layerhopContractFrom.depositToChannel(getDepositAddress(), tokenToShipAddress, planTokenAmount);
+
     console.log('depositToChannel res', res);
     setAppState('depositComplete');
     return res;
   };
 
+  // TEMP
+  const swap = async () => {
+    // const swapRes = await crossChainSwap({
+    //   withdrawalAddress: config.layerhop.networks[networkIdTo].contractAddress,
+    //   transferQuote: estimate.transferQuote,
+    // });
+    // return swapRes;
+    return await transfer({ transferQuote: estimate.transferQuote, });
+  };
+
   // 5 - SHIP CARGO (CAPTAIN ACTION)
   const channelWithdraw = async () => {
     // if (!estimate.transferQuote) throw new Error('estimate.transferQuote is required to perform a cross chain swap');
-    
+
+    // get plan(s) from contract on the 'from' network
+    const plan = layerhopPlansFrom[0];
+
     const tokenToShipAmountBn = BigNumber.from(
       // utils.parseUnits(input, connextSdk.senderChain.assetDecimals)
       tokenToShipAmount + '', 18
     );
 
+    // do this to omit other fields included in plan
+    const thisPlan = {
+      accountAddress: plan.accountAddress,
+      opCode: plan.opCode.toString(),
+      // TOKEN_ADDRESS
+      param1: plan.param1._hex,
+      // TOKEN_AMOUNT
+      param2: plan.param2.toString(),
+      // SEND_TOKEN / STREAM_TOKEN
+      param3: plan.param3._hex,
+      // SEND_TO_ADDRESS / STREAM_TO_ADDRESS
+      param4: plan.param4._hex,
+      // @todo fixgure out why stream rate is being saved too large
+      streamRate: plan.streamRate.div(Math.pow(10, 18).toString()).toString(),
+    };
+    // let callData = [
+    //   thisPlan,
+    //   // @todo batch plans here
+    // ];
+    const callData = {
+      plans: [thisPlan],
+    };
+    // callData = 1;
+
     console.log('Generating withdrawCallData for withdraw onto other chain...');
-    const withdrawCallData = await layerhopContractFrom.getCallData({
-      plans: [
-        [
-          // param1 - accountAddress
-          address,
-          // param2 - opCode
-          0x0001,
-          // param3 - tokenAddress
-          tokenAddressTo,
-          // param4 - tokenAmount
-          // @todo fix this to only be for user 1 once batching is enabled
-          // tokenToShipAmount / Math.pow(10, 18),
-          // no idea why this needs to be divided 10^18
-          // tokenToShipAmountBn.div(Math.pow(10, 18).toString()).toString(),
-          tokenToShipAmountBn.toString(),
-          // param5 - null
-          0x0,
-          // param6 - null
-          0x0,
-        ],
-        // @todo batch plans here
-      ],
-    });
+    const withdrawCallData = await layerhopContractFrom.getCallData(callData);
     console.log('withdrawCallData:', withdrawCallData);
 
     // browserNode fields:
@@ -518,15 +523,6 @@ export default () => {
     // public recipientChain?: ChainDetail;
     // public browserNode?: BrowserNode;
 
-    // const params = {
-    //   recipientAddress: config.layerhop.networks[networkIdTo].contractAddress,
-    //   transferQuote: estimate.transferQuote,
-    //   // withdrawCallTo: config.layerhop.networks[networkIdTo].contractAddress,
-    //   // withdrawCallData,
-    //   // generateCallData,
-    //   onTransferred: () => console.log(`cross chain swap transfered: `),
-    //   onFinished: (txHash, amountUi, amountBn) => console.log(`cross chain swap finished: `, txHash, amountUi, amountBn), // onFinished callback function,
-    // };
     const withdrawParams = {
       tokenAmount: tokenToShipAmountBn.toString(),
       tokenAddress: tokenAddressTo,
@@ -538,12 +534,10 @@ export default () => {
     console.log('calling withdraw with withdrawParams:');
     console.log(withdrawParams);
 
-    // const connextWithdraw = await crossChainSwap(params);
-
     // const amount = BigNumber.from((3 * Math.pow(10, 18)).toString()).toString();
     const { isError, error, value } = await withdraw(withdrawParams);
     console.log('channelWithdraw res');
-    if (isError || error) throw new Error('Error in withdraw:', error);
+    if (isError || error) throw new Error('Error in withdraw:', error.message, error.context);
     if (value) {
       console.log('connextWithdraw success!');
       console.log('value', value);
@@ -552,25 +546,27 @@ export default () => {
       return value;
     }
 
-    // const connextWithdraw = await withdraw({
-    //   assetId: tokenToShipAddress,
-    //   amount: tokenToShipAmountBn,
-    //   channelAddress: getWithdrawAddress(), //fromChannel.channelAddress,
-    //   callData,
-    //   callTo: config.layerhop.networks[networkIdTo].contractAddress,
-    //   // @todo allow user to change this to their address on the other chain if they don't want to deposit into the layerhop contract
-    //   recipient: config.layerhop.networks[networkIdTo].contractAddress,
-    //   // fee,
+    // const swapRes = await crossChainSwap({
+    //   withdrawalAddress: config.layerhop.networks[networkIdTo].contractAddress,
+    //   transferQuote: estimate.transferQuote,
+    //   withdrawCallData,
+    //   withdrawCallTo: config.layerhop.networks[networkIdTo].contractAddress,
     // });
-    // if (connextWithdraw.isError) {
-    //   throw connextWithdraw.getError();
-    // }
-    // console.log(`connextWithdraw complete: `, connextWithdraw.getValue());
-    // make sure tx is sent
-    // let tx = connextWithdraw.getValue().transactionHash;
-    // const providerFrom = getProvider(networkId);
-    // let receipt = await providerFrom.waitForTransaction(tx);
-    // console.log('connextWithdraw receipt: ', receipt);
+
+
+
+    // cross chain swap
+    // const swapRes = await crossChainSwap({
+    //   withdrawalAddress: config.layerhop.networks[networkIdTo].contractAddress,
+    //   transferQuote: estimate.transferQuote,
+    //   withdrawCallData,
+    //   withdrawCallTo: config.layerhop.networks[networkIdTo].contractAddress,
+    // });
+
+
+    // withdraw
+
+
   };
 
   const getTokenSymbolByAddress = tokenAddress => {
@@ -581,22 +577,6 @@ export default () => {
   const getRateArrow = rate => {
     if (rate > 0) return <Typography className={classes.rateUpArrow}>▲</Typography>;
     if (rate < 0) return <Typography className={classes.rateDownArrow}>▼</Typography>;
-  };
-
-  const getNeededAllowance = () => {
-    if (!tokenToShipAmount || tokenAllowanceFrom === undefined) return '0';
-    const toShipBn = BigNumber.from(tokenToShipAmount + '');
-    const allowanceBn = BigNumber.from(tokenAllowanceFrom + '');
-    // no additional allowance needed if allowance greater than shipping total
-    if (allowanceBn.gte(toShipBn)) return '0';
-    // otherwise return the deficit
-    const result = toShipBn.sub(allowanceBn).toString();
-    // console.log('getNeededAllowance', result);
-    return result;
-  };
-
-  const moreAllowanceNeeded = () => {
-    return ![0, '0'].includes(getNeededAllowance());
   };
 
   const getNetworkName = networkId => {
@@ -725,25 +705,39 @@ export default () => {
               </Grid>
               {layerhopBalancesFrom && (parseInt(layerhopBalancesFrom) / Math.pow(10, 18)).toFixed(6)}
 
-              <Typography variant='h6' justify='center'>Shipping Plans 📋</Typography>
-              📦📦📦
-              {layerhopBalancesFrom && layerhopBalancesFrom[tokenToShipAddress] && 
-              Object.entries(layerhopBalancesFrom[tokenToShipAddress]).map(([accountAddress, balance]) =>
-                <Grid container item sm={12}>
+              <Typography variant='h6' justify='center'>Shipping Plans 📦📦📦</Typography>
+              {layerhopPlansFrom.map((plan, i) =>
+                <Grid container item key={i} sm={12}>
+                  {/* headers */}
+                  {/* <Grid item sm={3}>Account</Grid> */}
+                  <Grid item sm={3}>Type</Grid>
+                  <Grid item sm={3}>Token</Grid>
+                  <Grid item sm={3}>Deposit</Grid>
+                  <Grid item sm={3}>Stream Rate</Grid>
+                  {/* data */}
+                  {/* <Grid item sm={3}>
+                    <Typography>{plan.accountAddress.toString().substring(0, 8)}</Typography>
+                  </Grid> */}
                   <Grid item sm={3}>
-                    <Typography variant='h6'>{accountAddress}</Typography>
+                    <Typography>{plan.opCode === 1 ? 'Static Deposit' : 'Deposit & Stream'}</Typography>
                   </Grid>
                   <Grid item sm={3}>
-                    <Typography variant='h6'>{balance}</Typography>
+                    <Typography>{plan.param1.toString().substring(0, 8)}</Typography>
+                  </Grid>
+                  <Grid item sm={3}>
+                    <Typography>{plan.param2.div(Math.pow(10, 18).toString()).toString()}</Typography>
+                  </Grid>
+                  <Grid item sm={3}>
+                    <Typography>{plan.streamRate.div(Math.pow(10, 18).toString()).toString()}</Typography>
                   </Grid>
                 </Grid>
               )}
             </Paper>
           </Grid>
 
-          <Grid container item sm={2}>
+          <Grid container justify='center' item sm={2}>
             <Paper className={classes.networkBlock}>
-              <Grid item justify='center' sm={12}>
+              <Grid item sm={12}>
                 <Typography>Ship ⚓</Typography>
               </Grid>
               
@@ -764,16 +758,24 @@ export default () => {
                   >Load Cargo</Button>
                 </Grid>
               }
-              {appState === 'depositComplete' &&
+              <Grid item sm={12}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  // disabled={!estimate || !estimate.transferQuote}
+                  onClick={async() => await swap()}
+                >{'transfer ->'}</Button>
+              </Grid>
+              {/* {appState === 'depositComplete' && */}
                 <Grid item sm={12}>
                   <Button
                     variant="contained"
                     color="primary"
-                    disabled={!estimate || !estimate.transferQuote}
+                    // disabled={!estimate || !estimate.transferQuote}
                     onClick={async() => await channelWithdraw()}
                   >Ship Cargo!</Button>
                 </Grid>
-              }
+              {/* } */}
 
               {/* <Grid item sm={12}>
                 <Button
@@ -820,18 +822,24 @@ export default () => {
       </Grid>
 
       <AppDialog
+        // @todo cleanup these props
         dialogToken={dialogToken}
         isOpen={dialogIsOpen}
         setIsOpen={setDialogIsOpen}
         // onClose={}
-        tokenAllowanceFrom={tokenAllowanceFrom}
-        moreAllowanceNeeded={moreAllowanceNeeded}
-        getNeededAllowance={getNeededAllowance}
-        approveERC20={approveERC20}
+        // tokenAllowanceFrom={tokenAllowanceFrom}
+        // moreAllowanceNeeded={moreAllowanceNeeded}
+        // getNeededAllowance={getNeededAllowance}
+        // approveERC20={approveERC20}
         tokenToShip={tokenToShip}
+        tokenToShipAddress={tokenToShipAddress}
         tokenToShipAmount={tokenToShipAmount}
         setTokenToShipAmount={setTokenToShipAmount}
         depositTokensToLayerhop={depositTokensToLayerhop}
+        address={address}
+        config={config}
+        networkId={networkId}
+        signer={signer}
       />
 
     </div>

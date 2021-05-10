@@ -2,10 +2,10 @@ export default {
   layerhop: {
     networks: {
       5: {
-        contractAddress: '0x940F103aD99f9cCc15a38f7351a9A9A21Ce605Bf',
+        contractAddress: '0x24Df70c56D02cbe9E0C466f16AB3Af5825AFB51a',
       },
       80001: {
-        contractAddress: '0x547f796Ca7079765Bf6f6d4c00094a394E665948',
+        contractAddress: '0xf44dD78Af92c9E378Aa121142d903c446D3161EF',
       },
     },
   },
